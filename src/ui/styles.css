@@ -1007,6 +1007,76 @@ hr {
   color: #e57a66;
 }
 
+.bc-img {
+  position: relative;
+  height: 74px;
+  display: grid;
+  place-items: center;
+  margin: 2px 0;
+}
+
+.bc-img::before,
+.bp-hero::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 70%;
+  height: 22%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, color-mix(in srgb, var(--race) 35%, transparent), transparent 70%);
+}
+
+.bc-img img {
+  position: relative;
+  max-width: 100%;
+  max-height: 74px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 4px rgba(0, 0, 0, 0.45));
+  transition: transform 0.15s;
+}
+
+.bcard:hover .bc-img img {
+  transform: scale(1.06);
+}
+
+.bp-hero {
+  position: relative;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  margin-bottom: -4px;
+}
+
+.bp-hero img {
+  position: relative;
+  max-height: 120px;
+  max-width: 70%;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 6px rgba(0, 0, 0, 0.5));
+}
+
+.unlock-hint {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.unlock-hint .ico {
+  margin-top: 1px;
+}
+
+.unlock-hint b {
+  color: var(--text-2);
+}
+
 .bcard .nm {
   display: flex;
   align-items: center;
