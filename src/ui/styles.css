@@ -300,6 +300,11 @@ button {
   color: #fecaca;
 }
 
+.tag.kind-support {
+  background: rgba(168, 85, 247, 0.22);
+  color: #d8b4fe;
+}
+
 .btn {
   display: flex;
   align-items: center;

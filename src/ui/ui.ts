@@ -556,6 +556,14 @@ export class Ui {
       stats.push(['兵力上限', `${def.maxAlive![lvl] + mods.maxAliveAdd}`]);
       stats.push(['士兵強度', `×${UNIT_LEVEL_MULT[lvl]}`]);
     }
+    if (def.special?.type === 'healAura') {
+      stats.push(['士兵回復', `每秒 ${pct(def.special.pctPerSec[lvl])} 最大生命`]);
+      stats.push(['範圍', `${def.special.radius} 格`]);
+    }
+    if (def.special?.type === 'warBanner') {
+      stats.push(['全軍傷害', `+${pct(def.special.dmg[lvl])}`]);
+      stats.push(['全軍移速', `+${pct(def.special.speed[lvl])}`]);
+    }
     if (def.kind === 'tower') {
       const t = def.tower!;
       stats.push(['傷害', `${Math.round(t.damage[lvl] * mods.towerDmgMult * bonus.towerDmgMult)}${t.damageType === 'magic' ? '（魔法）' : ''}`]);
@@ -594,6 +602,9 @@ export class Ui {
   }
 
   private upgradePreview(def: BuildingDef, level: number): string {
+    if (def.special?.type === 'healAura') return `回復 ${pct(def.special.pctPerSec[level - 1])} → ${pct(def.special.pctPerSec[level])}／秒`;
+    if (def.special?.type === 'warBanner') return `全軍傷害 +${pct(def.special.dmg[level - 1])} → +${pct(def.special.dmg[level])}`;
+    if (def.kind === 'support') return '提高建築生命';
     if (def.kind === 'resource') return `產量 ${def.income![level - 1]} → ${def.income![level]}`;
     if (def.kind === 'tower') return `傷害 ${def.tower!.damage[level - 1]} → ${def.tower!.damage[level]}`;
     return `出兵 ${def.spawnInterval![level - 1]}→${def.spawnInterval![level]} 秒・上限 ${def.maxAlive![level - 1]}→${def.maxAlive![level]}・士兵 ×${UNIT_LEVEL_MULT[level]}`;
