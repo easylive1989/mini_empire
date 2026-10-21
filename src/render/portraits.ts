@@ -9,7 +9,6 @@ export const RACE_MASCOT: Record<RaceId, string> = {
   human: 'human_knight',
   elf: 'elf_archer',
   dwarf: 'dwarf_shieldguard',
-  demon: 'demon_berserker',
   angel: 'angel_judicator',
 };
 

@@ -11,7 +11,6 @@ export const LORE: Record<RaceId, KingdomLore> = {
   human: { kingdom: '艾斯特蘭王國', king: '雷歐尼斯王', prince: '艾倫王子', capital: '白獅王城' },
   elf: { kingdom: '銀月森林王國', king: '伊洛溫王', prince: '林恩王子', capital: '世界樹之都' },
   dwarf: { kingdom: '鐵爐山王國', king: '巴爾金王', prince: '布洛克王子', capital: '鐵爐要塞' },
-  demon: { kingdom: '深淵王朝', king: '巴爾札王', prince: '卡爾王子', capital: '熔岩王座' },
   angel: { kingdom: '天穹聖國', king: '賽拉菲恩王', prince: '艾利爾王子', capital: '天穹聖城' },
 };
 

@@ -119,14 +119,13 @@ export type BattleEvent =
   | { type: 'death'; id: number }
   | { type: 'heal'; id: number; amount: number }
   | { type: 'explode'; x: number; z: number; radius: number; kind: 'fire' | 'toxic' | 'holy' | 'shadow' }
-  | { type: 'aoe'; x: number; z: number; radius: number; kind: 'root' | 'taunt' | 'shield' | 'frenzy' | 'summon' | 'sacrifice' }
+  | { type: 'aoe'; x: number; z: number; radius: number; kind: 'root' | 'taunt' | 'shield' | 'summon' }
   | { type: 'status'; id: number; status: StatusId }
   | { type: 'buildingHit'; uid: number; amount: number }
   | { type: 'buildingDestroyed'; uid: number }
   | { type: 'towerAttack'; uid: number }
   | { type: 'repair'; uid: number; amount: number }
   | { type: 'resurrect'; id: number }
-  | { type: 'charm'; id: number }
   | { type: 'gold'; x: number; z: number; amount: number }
   | { type: 'chain'; points: { x: number; z: number }[] }
   | { type: 'steal'; x: number; z: number; amount: number }
@@ -198,7 +197,6 @@ export class Battle {
   /** Damage / speed bonus from a standing war monument this tick. */
   bannerDmg = 0;
   bannerSpeed = 0;
-  souls = 0;
   result: 'win' | 'lose' | null = null;
   private endTimer = -1;
   private nextId = 1;
@@ -206,7 +204,6 @@ export class Battle {
   private frontX: number;
   private dead: Entity[] = [];
   combinedArmsBonus = 0;
-  soulBonus = 0;
 
   constructor(state: GameState) {
     this.state = state;
@@ -438,6 +435,22 @@ export class Battle {
     return best;
   }
 
+  /** The nearest foe within range that is currently targeting `e`. */
+  private attackerOf(e: Entity, maxRange: number): Entity | undefined {
+    let best: Entity | undefined;
+    let bestD = maxRange * maxRange;
+    const canHitAir = !!e.def.canHitAir;
+    for (const o of this.entities) {
+      if (o.targetId !== e.id || !this.canTarget({ team: e.team, canHitAir }, o)) continue;
+      const d = dist2(e.x, e.z, o.x, o.z);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    return best;
+  }
+
   private nearestBuilding(x: number, z: number): BBuilding | undefined {
     let best: BBuilding | undefined;
     let bestD = Infinity;
@@ -476,9 +489,8 @@ export class Battle {
     if (!target.alive) return;
     let d = duration;
     if (status === 'root' && target.baseTeam === 'enemy') d += this.mods.rootDurationAdd;
-    const hardCC = status === 'stun' || status === 'root' || status === 'charm' || status === 'taunted';
+    const hardCC = status === 'stun' || status === 'root' || status === 'taunted';
     if (target.def.boss && hardCC) {
-      if (status === 'charm') return;
       d *= 0.35;
     } else if (target.def.large && (status === 'stun' || status === 'root')) {
       d *= 0.6;
@@ -489,15 +501,7 @@ export class Battle {
       v: cur ? (status === 'slow' ? Math.min(cur.v, value) : Math.max(cur.v, value)) : value,
       src: src ?? cur?.src,
     };
-    if (status === 'charm') {
-      if (cur) return;
-      target.team = target.baseTeam === 'player' ? 'enemy' : 'player';
-      target.targetId = null;
-      target.targetBuilding = null;
-      this.events.push({ type: 'charm', id: target.id });
-    } else if (!cur) {
-      this.events.push({ type: 'status', id: target.id, status });
-    }
+    if (!cur) this.events.push({ type: 'status', id: target.id, status });
   }
 
   // ---------------------------------------------------------------- damage
@@ -660,32 +664,11 @@ export class Battle {
       }
     } else {
       if (!e.summoned) this.playerDeaths += 1;
-      this.souls += 1;
       this.dead.push(e);
     }
     // Death triggers on the dying unit.
     for (const tr of e.def.traits ?? []) {
       if (tr.type === 'explodeOnDeath') this.explode(e, tr.damage, tr.radius);
-      if (tr.type === 'spawnOnDeath') {
-        for (let k = 0; k < tr.count; k++) {
-          const u = this.createEntity(getUnit(tr.unitId), e.baseTeam, e.x + this.rng.range(-1, 1), e.z + this.rng.range(-1, 1), {
-            levelMult: e.levelMult,
-            summoned: true,
-          });
-          u.cooldown = 0.6;
-        }
-      }
-    }
-    // Reactions of others to an ally death.
-    for (const o of this.entities) {
-      if (!o.alive || o.baseTeam !== e.baseTeam) continue;
-      for (const tr of o.def.traits ?? []) {
-        if (tr.type === 'soulSiphon' && o.stacks < tr.maxStacks && dist2(o.x, o.z, e.x, e.z) <= tr.radius * tr.radius) {
-          o.stacks += 1;
-          this.heal(o, tr.heal, false);
-        }
-        if (tr.type === 'stackOnAllyDeath' && o.stacks < tr.maxStacks) o.stacks += 1;
-      }
     }
     // Killer rewards.
     if (killer?.alive) {
@@ -795,14 +778,7 @@ export class Battle {
           this.damageEntity(e, s.v * dt, 'magic', {}, { silent: true });
           if (!e.alive) break;
         }
-        if (s.t <= 0) {
-          if (key === 'charm') {
-            e.team = e.baseTeam;
-            e.targetId = null;
-            e.targetBuilding = null;
-          }
-          delete e.statuses[key];
-        }
+        if (s.t <= 0) delete e.statuses[key];
       }
       const regen = e.def.traits?.find((t) => t.type === 'regen') as { pct: number } | undefined;
       if (e.alive && regen && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * regen.pct * dt);
@@ -864,7 +840,6 @@ export class Battle {
       combined = kinds.size * m.combinedArms * (champion ? 1.5 : 1);
     }
     this.combinedArmsBonus = combined;
-    this.soulBonus = m.soulDmg > 0 ? Math.min(this.souls, m.soulMax) * m.soulDmg : 0;
 
     for (const e of this.entities) {
       if (!e.alive) continue;
@@ -873,7 +848,7 @@ export class Battle {
       let armor = 0;
       let eva = 0;
       if (e.baseTeam === 'player') {
-        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus + this.bannerDmg);
+        dmg *= m.unitDmgMult * (1 + combined + this.bannerDmg);
         spd *= 1 + combined;
         armor += m.unitArmorAdd;
         eva += m.unitEvasionAdd;
@@ -897,17 +872,10 @@ export class Battle {
             dmg *= tr.dmgMult;
           }
         }
-        if (tr.type === 'soulSiphon') dmg *= 1 + e.stacks * tr.dmgPerSoul;
-        if (tr.type === 'stackOnAllyDeath') dmg *= 1 + e.stacks * tr.dmgPerDeath;
         if (tr.type === 'berserk') spd *= 1 + tr.maxAtkSpeed * (1 - e.hp / e.maxHp);
       }
       const bl = e.statuses.blessed;
       if (bl && bl.t > 0) dmg *= bl.v;
-      const fr = e.statuses.frenzy;
-      if (fr && fr.t > 0) {
-        dmg *= 1.2;
-        spd *= fr.v;
-      }
       e.dmgMult = dmg;
       e.atkSpeedMult = spd;
       e.armorAdd = armor;
@@ -1012,31 +980,6 @@ export class Battle {
           f.targetBuilding = null;
         }
         this.events.push({ type: 'aoe', x: e.x, z: e.z, radius: tr.radius, kind: 'taunt' });
-        return true;
-      }
-      case 'charm': {
-        const foes = this.foesInRadius(e.team, e.x, e.z, tr.range).filter((f) => !f.def.boss && !f.def.large && !this.has(f, 'charm'));
-        if (!foes.length) return false;
-        foes.sort((a, b) => dist2(e.x, e.z, a.x, a.z) - dist2(e.x, e.z, b.x, b.z));
-        this.applyStatus(foes[0], 'charm', tr.duration, 1, e.id);
-        e.attackAnim = 0.4;
-        this.events.push({ type: 'attack', id: e.id });
-        return true;
-      }
-      case 'sacrifice': {
-        const allies = this.alliesInRadius(e.team, e.x, e.z, tr.range).filter((o) => o !== e && !o.def.large && o.baseTeam === e.team);
-        if (!allies.length || !this.foesInRadius(e.team, e.x, e.z, 14).length) return false;
-        allies.sort((a, b) => {
-          const ia = a.def.id === 'demon_imp' ? 0 : 1;
-          const ib = b.def.id === 'demon_imp' ? 0 : 1;
-          return ia - ib || a.hp / a.maxHp - b.hp / b.maxHp;
-        });
-        const victim = allies[0];
-        this.events.push({ type: 'aoe', x: victim.x, z: victim.z, radius: tr.radius, kind: 'sacrifice' });
-        this.kill(victim);
-        for (const a of this.alliesInRadius(e.team, e.x, e.z, tr.radius)) this.applyStatus(a, 'frenzy', tr.duration, tr.atkSpeedMult);
-        e.attackAnim = 0.4;
-        this.events.push({ type: 'attack', id: e.id });
         return true;
       }
       case 'repair': {
@@ -1268,7 +1211,9 @@ export class Battle {
       // Never chase past the formation's leash.
       const maxX = this.frontX + FORMATION.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + this.rangeOf(e);
       const cur = this.getEntity(e.targetId);
-      const foe = this.nearestFoe(e, acquire, maxX);
+      // Past the leash, still answer whoever is attacking this soldier: otherwise a lone archer
+      // standing just outside it could stall the wave until it times out.
+      const foe = this.nearestFoe(e, acquire, maxX) ?? this.attackerOf(e, acquire);
       // Stick to the current target unless something is much closer.
       if (cur?.alive && cur.team !== e.team && foe && cur !== foe) {
         const dc = dist2(e.x, e.z, cur.x, cur.z);

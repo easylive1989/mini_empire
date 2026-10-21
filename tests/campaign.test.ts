@@ -94,6 +94,12 @@ describe('campaign progression', () => {
     expect(loadCampaign(memoryStore())).toBeNull();
   });
 
+  it('drops saves of a retired race', () => {
+    const store = memoryStore();
+    saveCampaign({ ...newCampaign('human'), race: 'demon' as never }, store);
+    expect(loadCampaign(store)).toBeNull();
+  });
+
   it('turns liberated territories into perks, gold and special buildings', () => {
     const c = newCampaign('human');
     const baseGold = startingGold(c, 't_greystone');

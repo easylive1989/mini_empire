@@ -7,7 +7,6 @@ const BUILDING_TEAM: Record<RaceId | 'shadow', [string, string] | null> = {
   human: null,
   elf: ['#6fe08c', '#14532d'],
   dwarf: ['#ffd27a', '#b4441a'],
-  demon: ['#d0343a', '#2a0610'],
   angel: ['#ffffff', '#d9b54a'],
 };
 
@@ -62,6 +61,8 @@ export function buildingMaterial(original: THREE.Material, race: RaceId | 'shado
 export interface Palette {
   team?: string;
   accent?: string;
+  /** Armour and blade steel. */
+  metal?: string;
   skin?: string;
   tint?: string;
   emissive?: string;
@@ -69,28 +70,22 @@ export interface Palette {
 }
 
 export const PALETTES: Record<string, Palette> = {
-  human: { team: '#2f6fd6', accent: '#e8c05a' },
+  human: { team: '#2f6fd6', accent: '#e8c05a', metal: '#b7c3d0' },
   priest: { team: '#f4f4f5', accent: '#3b82f6' },
-  royal: { team: '#1d4ed8', accent: '#facc15' },
-  elf: { team: '#2e9e4f', accent: '#d4b25a', skin: '#f6dcc0' },
-  druid: { team: '#5b7f1e', accent: '#8b5a2b', skin: '#f6dcc0' },
-  wind: { team: '#0fa293', accent: '#e5e7eb', skin: '#f6dcc0' },
-  moon: { team: '#c7d2fe', accent: '#818cf8', skin: '#f3e3d8' },
+  royal: { team: '#1d4ed8', accent: '#facc15', metal: '#c8d2de' },
+  elf: { team: '#1f7a3a', accent: '#d4b25a', metal: '#c3d3b4', skin: '#f6dcc0' },
+  druid: { team: '#4a6618', accent: '#8b5a2b', skin: '#f6dcc0' },
+  wind: { team: '#0b8073', accent: '#e5e7eb', metal: '#b9d6d0', skin: '#f6dcc0' },
+  moon: { team: '#7c86e0', accent: '#6366f1', metal: '#d6dcf5', skin: '#f3e3d8' },
   treant: { team: '#3f7d2a', accent: '#6b4423', skin: '#7a5230', tint: '#c7ab7f' },
-  dwarf: { team: '#d97706', accent: '#92400e' },
-  engineer: { team: '#b45309', accent: '#fbbf24' },
-  rune: { team: '#2563eb', accent: '#93c5fd' },
-  metal: { team: '#57534e', accent: '#f59e0b', skin: '#9ca3af', tint: '#c9ccd1' },
-  imp: { team: '#7f1d1d', accent: '#f97316', skin: '#e0362f' },
-  demon: { team: '#3f0a0a', accent: '#f97316', skin: '#b91c1c' },
-  warlock: { team: '#6d28d9', accent: '#22c55e', skin: '#b91c1c' },
-  succubus: { team: '#be185d', accent: '#7c3aed', skin: '#c084fc' },
-  cultist: { team: '#7f1d1d', accent: '#111827', skin: '#b91c1c' },
-  pitlord: { team: '#1c1917', accent: '#f97316', skin: '#991b1b', tint: '#e8c0b0' },
-  angel: { team: '#fafafa', accent: '#facc15', skin: '#ffe9dc' },
-  aegis: { team: '#e0f2fe', accent: '#60a5fa', skin: '#ffe9dc' },
-  judicator: { team: '#fde68a', accent: '#f59e0b', skin: '#ffe9dc' },
-  seraph: { team: '#fffbeb', accent: '#fbbf24', skin: '#ffe9dc', emissive: '#3a2a08' },
+  dwarf: { team: '#d97706', accent: '#92400e', metal: '#dba25e' },
+  engineer: { team: '#b45309', accent: '#fbbf24', metal: '#b98d5a' },
+  rune: { team: '#2563eb', accent: '#93c5fd', metal: '#9fb2c8' },
+  metal: { team: '#57534e', accent: '#f59e0b', metal: '#8f949b', skin: '#9ca3af', tint: '#c9ccd1' },
+  angel: { team: '#fafafa', accent: '#facc15', metal: '#e4d8b8', skin: '#ffe9dc' },
+  aegis: { team: '#e0f2fe', accent: '#60a5fa', metal: '#e3ecf6', skin: '#ffe9dc' },
+  judicator: { team: '#fde68a', accent: '#f59e0b', metal: '#f0d58a', skin: '#ffe9dc' },
+  seraph: { team: '#fffbeb', accent: '#fbbf24', metal: '#f3e2b0', skin: '#ffe9dc', emissive: '#3a2a08' },
   ghost: { tint: '#a5ecff', emissive: '#1f6a80', opacity: 0.55 },
   toxic: { tint: '#a8e070', emissive: '#1b3300' },
   necro: { tint: '#c4a7ff', emissive: '#14002a' },
@@ -151,15 +146,49 @@ function inRange(h: number, s: number, ranges: HueRange[]): boolean {
   return ranges.some(([a, b, smin]) => s >= smin && (a <= b ? h >= a && h <= b : h >= a || h <= b));
 }
 
-/** Reshade a pixel to the target colour keeping its relative brightness. */
+/** Reshade a pixel to the target colour keeping its relative brightness (softened so light colours don't blow out). */
 function reshade(l: number, target: THREE.Color, refL: number): [number, number, number] {
   const hsl = { h: 0, s: 0, l: 0 };
   target.getHSL(hsl, THREE.SRGBColorSpace);
-  const nl = Math.min(0.97, Math.max(0.03, hsl.l * (l / refL)));
+  const nl = Math.min(0.97, Math.max(0.03, hsl.l * Math.pow(l / refL, 0.7)));
   const c = new THREE.Color().setHSL(hsl.h, hsl.s, nl, THREE.SRGBColorSpace);
   const rgb = { r: 0, g: 0, b: 0 };
   c.getRGB(rgb, THREE.SRGBColorSpace);
   return [rgb.r * 255, rgb.g * 255, rgb.b * 255];
+}
+
+let envTex: THREE.Texture | null = null;
+/** Soft sky/ground gradient that armour reflects, so metal reads as metal without a full scene probe. */
+export function characterEnv(): THREE.Texture {
+  if (envTex) return envTex;
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, '#e4f1ff');
+  g.addColorStop(0.42, '#bcd6ea');
+  g.addColorStop(0.5, '#fff1d6');
+  g.addColorStop(0.56, '#8a9a66');
+  g.addColorStop(1, '#3f4a30');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 128);
+  envTex = new THREE.CanvasTexture(c);
+  envTex.mapping = THREE.EquirectangularReflectionMapping;
+  envTex.colorSpace = THREE.SRGBColorSpace;
+  return envTex;
+}
+
+/** Surface classes of the KayKit palette atlas, judged on the original (un-recoloured) pixel. */
+function isSteel(h: number, s: number, l: number): boolean {
+  return h >= 175 && h <= 245 && s >= 0.03 && s <= 0.32 && l >= 0.12 && l <= 0.85;
+}
+function isGold(h: number, s: number, l: number): boolean {
+  return h >= 35 && h <= 58 && s > 0.55 && l > 0.4;
+}
+/** Only the peach skin ramp; blond hair and beards sit just outside it. */
+function isSkin(h: number, s: number, l: number): boolean {
+  return h >= 17 && h <= 32 && s >= 0.7 && l >= 0.68 && l <= 0.9;
 }
 
 const charMats = new Map<string, THREE.Material>();
@@ -176,28 +205,78 @@ export function characterMaterial(original: THREE.Material, base: CharacterBase,
   }
   const mat = src.clone();
   const cloth = CLOTH[base];
-  if (src.map?.image && (pal.team || pal.skin || pal.accent)) {
+  if (src.map?.image && cloth) {
     const canvas = imageToCanvas(src.map.image as HTMLImageElement, 256);
     const ctx = canvas.getContext('2d')!;
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const px = data.data;
+    // Roughness in G, metalness in B (the glTF layout three.js expects for both maps).
+    const surf = document.createElement('canvas');
+    surf.width = canvas.width;
+    surf.height = canvas.height;
+    const sctx = surf.getContext('2d')!;
+    const sdata = sctx.createImageData(surf.width, surf.height);
+    const sp = sdata.data;
     const team = pal.team ? new THREE.Color(pal.team) : null;
     const accent = pal.accent ? new THREE.Color(pal.accent) : null;
+    const metal = pal.metal ? new THREE.Color(pal.metal) : null;
     const skin = pal.skin ? new THREE.Color(pal.skin) : null;
+    // Each atlas paints its cloth at a different brightness; shade around its own average so the
+    // palette colour comes through as specified (a white robe stays white on dark-green cloth).
+    const sum = { team: 0, nTeam: 0, accent: 0, nAccent: 0 };
+    for (let i = 0; i < px.length; i += 4) {
+      const [h, s, l] = rgbToHsl(px[i], px[i + 1], px[i + 2]);
+      if (inRange(h, s, cloth.team)) {
+        sum.team += l;
+        sum.nTeam++;
+      } else if (inRange(h, s, cloth.accent)) {
+        sum.accent += l;
+        sum.nAccent++;
+      }
+    }
+    const ref = (total: number, n: number, fallback: number) => (n ? Math.min(0.6, Math.max(0.25, total / n)) : fallback);
+    const teamRef = ref(sum.team, sum.nTeam, 0.5);
+    const accentRef = ref(sum.accent, sum.nAccent, 0.55);
     for (let i = 0; i < px.length; i += 4) {
       const [h, s, l] = rgbToHsl(px[i], px[i + 1], px[i + 2]);
       let out: [number, number, number] | null = null;
-      if (team && cloth && inRange(h, s, cloth.team)) out = reshade(l, team, 0.5);
-      else if (accent && cloth && inRange(h, s, cloth.accent)) out = reshade(l, accent, 0.55);
-      else if (skin && h >= 12 && h <= 40 && l > 0.6 && s > 0.3) out = reshade(l, skin, 0.8);
+      let rough = 0.85;
+      let metallic = 0;
+      if (isSteel(h, s, l)) {
+        rough = 0.34;
+        metallic = 0.85;
+        if (metal) out = reshade(l, metal, 0.55);
+      } else if (isGold(h, s, l)) {
+        rough = 0.3;
+        metallic = 0.9;
+      }
+      if (team && inRange(h, s, cloth.team)) out = reshade(l, team, teamRef);
+      else if (accent && inRange(h, s, cloth.accent)) out = reshade(l, accent, accentRef);
+      else if (skin && isSkin(h, s, l)) {
+        out = reshade(l, skin, 0.8);
+        rough = 0.6;
+      }
       if (out) {
         px[i] = out[0];
         px[i + 1] = out[1];
         px[i + 2] = out[2];
       }
+      sp[i] = 255;
+      sp[i + 1] = Math.round(rough * 255);
+      sp[i + 2] = Math.round(metallic * 255);
+      sp[i + 3] = 255;
     }
     ctx.putImageData(data, 0, 0);
+    sctx.putImageData(sdata, 0, 0);
     mat.map = canvasTexture(canvas, src.map);
+    const surface = canvasTexture(surf, src.map);
+    surface.colorSpace = THREE.NoColorSpace;
+    mat.roughnessMap = surface;
+    mat.metalnessMap = surface;
+    mat.roughness = 1;
+    mat.metalness = 1;
+    mat.envMap = characterEnv();
+    mat.envMapIntensity = 0.9;
   }
   if (pal.tint) mat.color = new THREE.Color(pal.tint);
   if (pal.emissive) {

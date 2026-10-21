@@ -91,10 +91,6 @@ const ROYALS: Record<RaceId, [ModelSpec, ModelSpec]> = {
     { base: 'Barbarian', keep: ['1H_Axe', 'Barbarian_Round_Shield'], hide: ['Barbarian_Hat'], palette: 'dwarf', extras: ['beard', 'crown'], squash: [1.15, 0.82, 1.15], scale: 1.1 },
     { base: 'Barbarian', keep: ['1H_Axe'], hide: ['Barbarian_Hat'], palette: 'engineer', extras: ['beard'], squash: [1.15, 0.82, 1.15] },
   ],
-  demon: [
-    { base: 'Barbarian', keep: ['2H_Axe'], hide: ['Barbarian_Hat'], palette: 'pitlord', extras: ['bigHorns', 'crown'], scale: 1.15 },
-    { base: 'Rogue', keep: ['Knife', 'Knife_Offhand'], hide: ['Rogue_Cape'], palette: 'demon', extras: ['horns'] },
-  ],
   angel: [
     { base: 'Knight', keep: ['1H_Sword', 'Round_Shield'], hide: ['Knight_Helmet'], palette: 'seraph', extras: ['bigWings', 'halo', 'crown'], scale: 1.12 },
     { base: 'Knight', keep: ['1H_Sword'], hide: ['Knight_Helmet'], palette: 'angel', extras: ['wings'] },

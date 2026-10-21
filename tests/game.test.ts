@@ -56,7 +56,7 @@ describe('game state', () => {
   });
 
   it('only expands to adjacent tiles within the castle allowance', () => {
-    const s = newGame('demon', 1);
+    const s = newGame('angel', 1);
     s.gold = 5000;
     expect(canExpand(s, 2, 0).ok).toBe(false); // castle level 1 has no allowance
     upgradeCastle(s);
@@ -249,15 +249,13 @@ describe('battle', () => {
     expect(before - foe.hp).toBeCloseTo(plain * 1.35);
   });
 
-  it('demon deaths feed the soul bonus and imps explode', () => {
-    const b = arena('demon');
-    const imp = spawn(b, 'demon_imp', 'player', 10);
-    const foe = spawn(b, 'm_minion', 'enemy', 10.5);
-    const hp0 = foe.hp;
-    b.damageEntity(imp, 9999, 'magic', {});
-    expect(foe.hp).toBeLessThan(hp0);
-    b.step();
-    expect(b.soulBonus).toBeCloseTo(0.01);
+  it('bloaters explode when killed', () => {
+    const b = arena('human');
+    const bloater = spawn(b, 'm_bloater', 'enemy', 10);
+    const militia = spawn(b, 'human_militia', 'player', 10.5);
+    const hp0 = militia.hp;
+    b.damageEntity(bloater, 9999, 'magic', {});
+    expect(militia.hp).toBeLessThan(hp0);
   });
 
   it('angel overheal turns into shields', () => {
@@ -301,6 +299,16 @@ describe('army formation', () => {
     expect(b.pushLine).toBeGreaterThan(start + 3);
     run(b, 20);
     expect(b.pushLine).toBeCloseTo(FRONT + FORMATION.maxPush);
+  });
+
+  it('soldiers answer an attacker standing past the chase limit', () => {
+    const b = arena('human');
+    const militia = spawn(b, 'human_militia', 'player', FRONT + 13);
+    const archer = spawn(b, 'r_archer', 'enemy', FRONT + 20.5);
+    archer.def = { ...archer.def, speed: 0 };
+    run(b, 0.5);
+    expect(archer.targetId).toBe(militia.id);
+    expect(militia.targetId).toBe(archer.id);
   });
 
   it('falls back when the enemy ahead is much stronger', () => {

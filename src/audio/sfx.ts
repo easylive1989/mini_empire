@@ -147,9 +147,6 @@ export class Sfx {
       case 'shield':
         [880, 1175].forEach((f, k) => this.tone(f, 0.3, 'sine', 0.07, undefined, k * 0.06));
         break;
-      case 'charm':
-        [784, 988].forEach((f, k) => this.tone(f, 0.2, 'sine', 0.07, undefined, k * 0.08));
-        break;
       case 'resurrect':
         [523, 659, 784, 1046, 1318].forEach((f, k) => this.tone(f, 0.25, 'sine', 0.07, undefined, k * 0.06));
         break;

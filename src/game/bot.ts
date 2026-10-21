@@ -35,11 +35,6 @@ export const BOT_PLANS: Record<RaceId, string[]> = {
     'dwarf_b_engineer', 'dwarf_runetower', 'dwarf_b_runepriest', 'dwarf_cannon', 'dwarf_b_shieldguard',
     'dwarf_flametower', 'dwarf_b_musketeer', 'dwarf_b_golem', 'dwarf_runetower', 'dwarf_flametower',
   ],
-  demon: [
-    'demon_b_imp', 'gold_mine', 'demon_b_berserker', 'gold_mine', 'demon_b_warlock', 'demon_pit', 'demon_b_imp',
-    'demon_tower', 'demon_b_succubus', 'demon_b_warlock', 'demon_b_cultist', 'demon_b_berserker', 'demon_b_pitlord',
-    'demon_b_imp', 'demon_b_succubus', 'demon_tower',
-  ],
   angel: [
     'angel_b_guardian', 'gold_mine', 'angel_b_archer', 'gold_mine', 'angel_b_healer', 'angel_sanctum',
     'angel_b_guardian', 'angel_tower', 'angel_b_aegis', 'angel_b_archer', 'angel_b_judicator', 'angel_b_seraph',

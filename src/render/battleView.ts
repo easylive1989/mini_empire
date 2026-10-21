@@ -32,12 +32,11 @@ const markGeo = new THREE.OctahedronGeometry(0.16, 0);
 const STATUS_COLORS: Partial<Record<StatusId, string>> = {
   stun: '#facc15',
   root: '#22c55e',
-  charm: '#f472b6',
   taunted: '#ef4444',
   rune: '#3b82f6',
   slow: '#7dd3fc',
 };
-const STATUS_ORDER: StatusId[] = ['stun', 'charm', 'root', 'taunted', 'rune', 'slow'];
+const STATUS_ORDER: StatusId[] = ['stun', 'root', 'taunted', 'rune', 'slow'];
 const statusMats = new Map<string, THREE.MeshBasicMaterial>();
 function statusMat(color: string): THREE.MeshBasicMaterial {
   let m = statusMats.get(color);
@@ -230,11 +229,10 @@ export class BattleView {
           this.sounds.play('boom', ev.x);
           break;
         case 'aoe': {
-          const colors = { root: '#22c55e', taunt: '#ef4444', shield: '#fde68a', frenzy: '#f97316', summon: '#a855f7', sacrifice: '#dc2626' };
+          const colors = { root: '#22c55e', taunt: '#ef4444', shield: '#fde68a', summon: '#a855f7' };
           this.fx.ring(ev.x, ev.z, ev.radius, colors[ev.kind], 0.7);
           if (ev.kind === 'root') this.fx.burst(ev.x, 0.2, ev.z, '#4ade80', 20, ev.radius * 1.5, 0.35, 0.8, 0, 1.5);
           if (ev.kind === 'shield') this.fx.rise(ev.x, 0.3, ev.z, '#fef3c7', 16, 0.3, ev.radius);
-          if (ev.kind === 'sacrifice') this.fx.burst(ev.x, 0.6, ev.z, '#b91c1c', 24, 4, 0.5, 0.7, 3);
           if (ev.kind === 'summon') this.fx.burst(ev.x, 0.2, ev.z, '#7e22ce', 16, 2, 0.5, 0.8);
           this.sounds.play(ev.kind === 'shield' ? 'shield' : ev.kind === 'root' ? 'root' : 'aoe', ev.x);
           break;
@@ -242,12 +240,6 @@ export class BattleView {
         case 'status': {
           const e = b.getEntity(ev.id);
           if (e && ev.status === 'stun') this.fx.burst(e.x, 1.6, e.z, '#fde047', 8, 1.5, 0.3, 0.5);
-          break;
-        }
-        case 'charm': {
-          const e = b.getEntity(ev.id);
-          if (e) this.fx.rise(e.x, 1, e.z, '#f9a8d4', 10, 0.35);
-          this.sounds.play('charm', e?.x);
           break;
         }
         case 'resurrect': {
@@ -374,14 +366,13 @@ export class BattleView {
             break;
           }
         }
-        if (!ringColor && e.team !== e.baseTeam) ringColor = STATUS_COLORS.charm;
         v.ring.visible = !!ringColor;
         if (ringColor) v.ring.material = statusMat(ringColor);
         v.mark.visible = (e.statuses.mark?.t ?? 0) > 0;
         if (v.mark.visible) v.mark.rotation.y += dt * 4;
         if ((e.statuses.burn?.t ?? 0) > 0 && Math.random() < dt * 8) this.fx.burst(x, 0.8, z, '#f97316', 1, 1, 0.3, 0.4);
-        if (((e.statuses.frenzy?.t ?? 0) > 0 || (e.statuses.blessed?.t ?? 0) > 0) && Math.random() < dt * 4) {
-          this.fx.rise(x, 0.2, z, e.statuses.frenzy ? '#ef4444' : '#fde047', 1, 0.25, 0.3);
+        if ((e.statuses.blessed?.t ?? 0) > 0 && Math.random() < dt * 4) {
+          this.fx.rise(x, 0.2, z, '#fde047', 1, 0.25, 0.3);
         }
       }
       v.model.mixer.update(dt);

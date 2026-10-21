@@ -170,8 +170,6 @@ export function baseModifiers(): Modifiers {
     startShieldPct: 0,
     overhealShieldCap: 0,
     combinedArms: 0,
-    soulDmg: 0,
-    soulMax: 0,
     rootDurationAdd: 0,
     critMult: 0,
     rangeAdd: {},
@@ -208,8 +206,6 @@ export function getModifiers(state: GameState): Modifiers {
   m.startShieldPct += r.startShieldPct ?? 0;
   m.overhealShieldCap += r.overhealShieldCap ?? 0;
   m.combinedArms += r.combinedArms ?? 0;
-  m.soulDmg += r.soulDmg ?? 0;
-  m.soulMax += r.soulMax ?? 0;
   for (const id of state.boons) BOON_MAP.get(id)?.apply(m);
   for (const id of state.perks ?? []) PERK_MAP.get(id)?.apply(m);
   if (state.level) {
@@ -538,18 +534,13 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
   }
   const mods = getModifiers(state);
   report.income.push(...projectedIncome(state));
-  let pit = 0;
   let repair = 0;
   for (const t of state.tiles) {
     if (!t.building) continue;
     const def = getBuilding(t.building.defId);
     const lvl = t.building.level - 1;
-    if (def.special?.type === 'sacrificePit') {
-      pit += Math.round(def.special.perDeath[lvl] * Math.min(def.special.cap, outcome.playerDeaths) * mods.incomeMult);
-    }
     if (def.special?.type === 'sanctum') repair += def.special.castleRepair[lvl];
   }
-  if (pit) report.income.push({ label: '獻祭坑（陣亡獻祭）', amount: pit });
   if (outcome.bounty) report.income.push({ label: `擊殺獎勵（${outcome.kills}）`, amount: outcome.bounty });
   if (mods.interest > 0) {
     report.income.push({ label: '國庫利息', amount: Math.min(120, Math.floor(state.gold * mods.interest)) });

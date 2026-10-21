@@ -1,7 +1,6 @@
 import type { BuildingDef, RaceDef, RaceId, UnitDef } from '../types';
 import { ANGEL, ANGEL_BUILDINGS, ANGEL_UNITS } from './angel';
 import { COMMON_BUILDINGS } from './common';
-import { DEMON, DEMON_BUILDINGS, DEMON_UNITS } from './demon';
 import { DWARF, DWARF_BUILDINGS, DWARF_UNITS } from './dwarf';
 import { ELF, ELF_BUILDINGS, ELF_UNITS } from './elf';
 import { HUMAN, HUMAN_BUILDINGS, HUMAN_UNITS } from './human';
@@ -9,11 +8,11 @@ import { FACTION_UNITS } from './factions';
 import { MONSTERS } from './monsters';
 import { SPECIAL_BUILDINGS, SPECIAL_UNITS } from './specials';
 
-export const RACES: RaceDef[] = [HUMAN, ELF, DWARF, DEMON, ANGEL];
+export const RACES: RaceDef[] = [HUMAN, ELF, DWARF, ANGEL];
 export const RACE_MAP = new Map<RaceId, RaceDef>(RACES.map((r) => [r.id, r]));
 
 export const UNITS = new Map<string, UnitDef>(
-  [...HUMAN_UNITS, ...ELF_UNITS, ...DWARF_UNITS, ...DEMON_UNITS, ...ANGEL_UNITS, ...MONSTERS, ...FACTION_UNITS, ...SPECIAL_UNITS].map(
+  [...HUMAN_UNITS, ...ELF_UNITS, ...DWARF_UNITS, ...ANGEL_UNITS, ...MONSTERS, ...FACTION_UNITS, ...SPECIAL_UNITS].map(
     (u) => [u.id, u],
   ),
 );
@@ -24,7 +23,6 @@ export const BUILDINGS = new Map<string, BuildingDef>(
     ...HUMAN_BUILDINGS,
     ...ELF_BUILDINGS,
     ...DWARF_BUILDINGS,
-    ...DEMON_BUILDINGS,
     ...ANGEL_BUILDINGS,
     ...SPECIAL_BUILDINGS,
   ].map((b) => [b.id, b]),

@@ -1,4 +1,4 @@
-export type RaceId = 'human' | 'elf' | 'dwarf' | 'demon' | 'angel';
+export type RaceId = 'human' | 'elf' | 'dwarf' | 'angel';
 export type Team = 'player' | 'enemy';
 export type DamageType = 'physical' | 'magic';
 export type ProjectileKind =
@@ -22,10 +22,8 @@ export type StatusId =
   | 'mark'
   | 'rune'
   | 'exposed'
-  | 'charm'
   | 'taunted'
   | 'blessed'
-  | 'frenzy'
   | 'moonlight';
 
 /** Data-driven abilities. The battle engine implements each `type`. */
@@ -49,11 +47,6 @@ export type Trait =
   | { type: 'explodeOnDeath'; radius: number; damage: number }
   | { type: 'berserk'; maxAtkSpeed: number }
   | { type: 'lifesteal'; ratio: number }
-  | { type: 'soulSiphon'; radius: number; dmgPerSoul: number; maxStacks: number; heal: number }
-  | { type: 'charm'; interval: number; range: number; duration: number }
-  | { type: 'sacrifice'; interval: number; range: number; radius: number; atkSpeedMult: number; dmgMult: number; duration: number }
-  | { type: 'stackOnAllyDeath'; dmgPerDeath: number; maxStacks: number }
-  | { type: 'spawnOnDeath'; unitId: string; count: number }
   | { type: 'repair'; amount: number; interval: number; range: number }
   | { type: 'shieldPulse'; interval: number; radius: number; pctMaxHp: number }
   | { type: 'shieldPower'; maxMult: number }
@@ -90,6 +83,7 @@ export type Extra =
   | 'bigHorns'
   | 'ears'
   | 'beard'
+  | 'dwarfHelm'
   | 'leaves'
   | 'chimney'
   | 'crown'
@@ -161,7 +155,6 @@ export type BuildingSpecial =
   | { type: 'market'; perAdjacent: number[] }
   | { type: 'moonwell'; hpBonus: number[] }
   | { type: 'forge'; towerDmg: number[] }
-  | { type: 'sacrificePit'; perDeath: number[]; cap: number }
   | { type: 'sanctum'; castleRepair: number[] }
   | { type: 'lightTower'; heal: number[]; interval: number; range: number }
   /** Heals every soldier in range by a share of max HP per second. */
@@ -211,8 +204,6 @@ export interface RaceMods {
   startShieldPct?: number;
   overhealShieldCap?: number;
   combinedArms?: number;
-  soulDmg?: number;
-  soulMax?: number;
 }
 
 export interface Synergy {
@@ -258,8 +249,6 @@ export interface Modifiers {
   startShieldPct: number;
   overhealShieldCap: number;
   combinedArms: number;
-  soulDmg: number;
-  soulMax: number;
   rootDurationAdd: number;
   critMult: number;
   rangeAdd: Record<string, number>;

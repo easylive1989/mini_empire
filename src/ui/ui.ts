@@ -556,7 +556,6 @@ export class Ui {
     if (L.bonuses) {
       const lines: [string, string][] = [];
       if (battle.mods.combinedArms > 0) lines.push(['聯合兵種', `+${pct(battle.combinedArmsBonus)}`]);
-      if (battle.mods.soulDmg > 0) lines.push([`靈魂收割（陣亡 ${battle.souls}）`, `+${pct(battle.soulBonus)}`]);
       if (battle.bannerDmg > 0) lines.push(['先王紀念碑', `+${pct(battle.bannerDmg)}`]);
       L.bonuses.replaceChildren(
         ...(lines.length ? lines.map(([k, v]) => h('div', { class: 'kv' }, h('span', {}, k), h('b', { class: 'num good' }, v))) : [h('div', { class: 'muted small' }, '目前沒有啟動中的加成')]),
@@ -777,7 +776,6 @@ export class Ui {
     const lvl = b.level - 1;
     if (def.kind === 'resource') {
       rows.push(['每波產出', `${buildingIncome(state, sel.i, sel.j)} 金`]);
-      if (def.special?.type === 'sacrificePit') rows.push(['陣亡獻祭', `每名 +${def.special.perDeath[lvl]} 金`]);
       if (def.special?.type === 'sanctum') rows.push(['修復主堡', `每波 +${def.special.castleRepair[lvl]}`]);
       if (def.special?.type === 'moonwell') rows.push(['相鄰兵營', `士兵生命 +${pct(def.special.hpBonus[lvl])}`]);
       if (def.special?.type === 'forge') rows.push(['相鄰防禦塔', `傷害 +${pct(def.special.towerDmg[lvl])}`]);

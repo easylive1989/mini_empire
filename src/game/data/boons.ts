@@ -78,23 +78,6 @@ export const BOONS: BoonDef[] = [
     apply: (m) => (m.engineerMult *= 2),
   },
   {
-    id: 'b_demon_pact',
-    race: 'demon',
-    name: '血之契約',
-    desc: '靈魂收割每名陣亡惡魔的加成由 1% 提升為 2%（上限 +100%）。',
-    apply: (m) => {
-      m.soulDmg += 0.01;
-      m.soulMax = 50;
-    },
-  },
-  {
-    id: 'b_demon_blast',
-    race: 'demon',
-    name: '爆裂之血',
-    desc: '所有死亡爆炸傷害 +70%。',
-    apply: (m) => (m.explosionMult *= 1.7),
-  },
-  {
     id: 'b_angel_light',
     race: 'angel',
     name: '神聖之光',

@@ -1,5 +1,6 @@
 import { CASTLE } from '../constants';
 import { castleMaxHp, CAMPAIGN_ECONOMY, newGame, type GameState } from '../state';
+import { RACE_MAP } from '../data/index';
 import type { RaceId } from '../types';
 import { territoryWaveCount } from './campaignWaves';
 import { PERK_MAP, type PerkDef } from './perks';
@@ -61,7 +62,8 @@ export function loadCampaign(store = defaultStore()): CampaignState | null {
     const raw = store?.getItem(SAVE_KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as CampaignState;
-    if (c.version !== 1 || !Array.isArray(c.conquered)) return null;
+    // Saves of a race that no longer exists (the demons were retired) start over.
+    if (c.version !== 1 || !Array.isArray(c.conquered) || !RACE_MAP.has(c.race)) return null;
     c.conquered = c.conquered.filter((id) => TERRITORIES.some((t) => t.id === id));
     if (!c.conquered.includes(START_TERRITORY.id)) c.conquered.unshift(START_TERRITORY.id);
     return c;
