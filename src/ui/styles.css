@@ -375,6 +375,12 @@ hr {
   color: var(--text-4);
 }
 
+.icon-btn.on {
+  color: var(--gold-hi);
+  border-color: var(--brass-line);
+  background: rgba(226, 179, 74, 0.16);
+}
+
 .icon-btn.text {
   width: auto;
   display: flex;

@@ -6,6 +6,7 @@ import { FACTIONS } from '../game/data/factions';
 import { RACE_MAP } from '../game/data/index';
 import type { RaceId } from '../game/types';
 import { packItem, type Assets, type PackName } from './assets';
+import { PRESETS, type Quality } from './quality';
 import { buildingMaterial } from './recolor';
 import { addLights, clamp01, ease, hexToWorld, puffTexture, skyTexture, SoftParticles } from './sceneKit';
 import type { ViewInsets } from './world';
@@ -110,6 +111,8 @@ export class MapView {
   private height = 1;
   private progress = 0;
   private shownProgress = 0;
+  /** Share of the miasma puffs drawn (fewer on the light preset: they are large overlapping sprites). */
+  private puffShare = 1;
   /** Camera mode: the interactive map pose, a slow orbit (title) or a fly-in from above. */
   mode: 'map' | 'orbit' = 'map';
   private fly = 1;
@@ -425,6 +428,10 @@ export class MapView {
 
   // ---------------------------------------------------------------- frame update
 
+  setQuality(q: Quality): void {
+    this.puffShare = PRESETS[q].puffs;
+  }
+
   update(dt: number): void {
     this.time += dt;
     if (this.fly < 1) this.fly = Math.min(1, this.fly + dt / this.flyDuration);
@@ -457,13 +464,14 @@ export class MapView {
       }
       // Dark miasma over occupied land.
       const dark = 1 - n.light;
+      const shown = Math.ceil(n.puffs.length * this.puffShare);
       n.puffs.forEach((sp, k) => {
         const ph = sp.userData.phase + this.time * (0.25 + k * 0.03);
         const rise = n.conquest < 1 ? (1 - dark) * 2.5 : 0;
         sp.position.set(Math.cos(ph) * sp.userData.radius, n.elev + sp.userData.height + Math.sin(ph * 1.7) * 0.15 + rise, Math.sin(ph) * sp.userData.radius);
         sp.scale.setScalar(sp.userData.scale);
         (sp.material as THREE.SpriteMaterial).opacity = (n.t.capital ? 0.72 : 0.5) * dark;
-        sp.visible = dark > 0.01;
+        sp.visible = dark > 0.01 && k < shown;
       });
       if (emit && dark > 0.5 && Math.random() < (n.t.capital ? 0.9 : 0.12)) {
         const a = Math.random() * Math.PI * 2;

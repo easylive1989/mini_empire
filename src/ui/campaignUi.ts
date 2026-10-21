@@ -146,7 +146,7 @@ export class CampaignUi {
           item('plain', 'exit', '離開', '', () => this.actions.exit()),
         ),
       ),
-      h('div', { class: 'ts-foot' }, ...this.ui.audioButtons(), h('span', { class: 'muted small' }, '3D 素材：KayKit（CC0）')),
+      h('div', { class: 'ts-foot' }, ...this.ui.toggleButtons(), h('span', { class: 'muted small' }, '3D 素材：KayKit（CC0）')),
       save ? this.saveCard(save) : null,
     );
     this.openMenu(screen, 'title-overlay');
@@ -250,7 +250,7 @@ export class CampaignUi {
       h(
         'div',
         { class: 'hud-actions' },
-        ...this.ui.audioButtons(),
+        ...this.ui.toggleButtons(),
         h('button', { class: 'icon-btn', 'aria-label': '回到標題', title: '回到標題', onclick: () => this.actions.backToTitle() }, icon('home', 18)),
       ),
     );
