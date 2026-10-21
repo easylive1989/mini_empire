@@ -46,6 +46,7 @@ import { Cutscene } from './render/cutscene';
 import { Effects } from './render/effects';
 import { MapView } from './render/mapView';
 import { BuildingThumbs, renderRacePortraits } from './render/portraits';
+import { detectQuality, FrameWatch, loadQuality, PRESETS, saveQuality, type Quality } from './render/quality';
 import { TownView } from './render/town';
 import { CLASSIC_SETTING, World } from './render/world';
 import { CampaignUi } from './ui/campaignUi';
@@ -81,9 +82,14 @@ class App {
   private acc = 0;
   private last = performance.now();
   private uiTimer = 0;
+  /** Set until the player picks a quality; while set, a slow machine is switched to 效能模式 automatically. */
+  private frameWatch: FrameWatch | null = null;
 
   constructor(root: HTMLElement) {
-    this.world = new World(root);
+    const saved = loadQuality();
+    const quality = saved ?? detectQuality();
+    if (!saved && quality === 'high') this.frameWatch = new FrameWatch();
+    this.world = new World(root, quality);
     const prefs = loadAudioPrefs();
     this.sfx.setMuted(!prefs.sfx);
     this.music.setMuted(!prefs.music);
@@ -104,12 +110,14 @@ class App {
       continueEndless: () => this.doContinueEndless(),
       toggleMusic: () => this.toggleAudio('music'),
       toggleSfx: () => this.toggleAudio('sfx'),
+      toggleQuality: () => this.toggleQuality(),
       deselect: () => this.select(null),
       retreat: () => this.goMap(),
       retry: () => this.levelId && this.startLevel(this.levelId),
       backToMap: () => this.goMap(),
     });
     this.ui.audio = prefs;
+    this.ui.lowQuality = this.world.quality === 'low';
     this.cui = new CampaignUi(
       root,
       {
@@ -135,6 +143,7 @@ class App {
     this.town.onBuilt = (x, z) => this.fx.burst(x, 0.5, z, '#d6c7a1', 24, 3, 0.6, 0.8, 3, 1.4);
     this.battleView = new BattleView(this.world, this.assets, this.fx, this.town, { play: (n) => this.sfx.play(n) });
     this.map = new MapView(this.assets);
+    this.map.setQuality(this.world.quality);
     this.cutscene = new Cutscene(this.assets, this.map);
     this.ui.portraits = renderRacePortraits(this.assets);
     this.thumbs = new BuildingThumbs(this.assets);
@@ -155,6 +164,22 @@ class App {
     saveAudioPrefs(prefs);
     this.sfx.play('click');
     return kind === 'music' ? prefs.music : prefs.sfx;
+  }
+
+  private toggleQuality(): boolean {
+    const q: Quality = this.world.quality === 'low' ? 'high' : 'low';
+    saveQuality(q);
+    this.setQuality(q);
+    return q === 'low';
+  }
+
+  private setQuality(q: Quality): void {
+    this.frameWatch = null;
+    const canvas = this.world.setQuality(q);
+    if (canvas) this.bindCanvas(canvas);
+    this.map.setQuality(q);
+    this.ui.lowQuality = q === 'low';
+    this.ui.paintQualityButtons();
   }
 
   private onResize(): void {
@@ -526,7 +551,12 @@ class App {
   }
 
   private bindInput(): void {
-    const canvas = this.world.renderer.domElement;
+    this.bindCanvas(this.world.renderer.domElement);
+    window.addEventListener('keydown', (e) => this.onKey(e));
+  }
+
+  /** Pointer input on the 3D view; re-attached when a quality change swaps the canvas. */
+  private bindCanvas(canvas: HTMLCanvasElement): void {
     canvas.addEventListener('mousemove', (e) => {
       if (this.mode === 'map') {
         const id = this.cui.menuOpen ? null : this.map.pick(e.clientX, e.clientY);
@@ -552,42 +582,49 @@ class App {
       if (t) this.sfx.play('click');
       this.select(t);
     });
-    window.addEventListener('keydown', (e) => {
-      if (this.mode === 'cutscene') {
-        if (e.key === 'Escape') this.endCutscene();
-        return;
-      }
-      if (this.mode === 'title' && e.key === 'Enter' && this.campaign) {
-        this.continueCampaign();
-        return;
-      }
-      if (!this.inLevel || !this.state) return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        if (!this.ui.overlayOpen) this.startWave();
-      } else if (e.key === 'Escape') {
-        if (this.ui.overlayOpen && this.state.phase === 'prep') this.ui.closeOverlay();
-        this.select(null);
-      } else if (['1', '2', '3'].includes(e.key) && this.battle) {
-        this.speed = [1, 2, 4][Number(e.key) - 1];
-        this.ui.setSpeedLabel(this.speed);
-        this.ui.render(this.state, null, this.battle);
-      } else if (['q', 'w', 'e'].includes(e.key.toLowerCase()) && !this.battle && this.state.phase === 'prep') {
-        const stance = ({ q: 'hold', w: 'advance', e: 'assault' } as const)[e.key.toLowerCase() as 'q' | 'w' | 'e'];
-        this.doSetStance(stance);
-        this.ui.render(this.state, this.selection, null);
-      } else if (e.key === 'u' && this.selection) {
-        if (isCastleTile(this.selection.i, this.selection.j)) this.doUpgradeCastle();
-        else this.doUpgrade();
-      }
-    });
+  }
+
+  private onKey(e: KeyboardEvent): void {
+    if (this.mode === 'cutscene') {
+      if (e.key === 'Escape') this.endCutscene();
+      return;
+    }
+    if (this.mode === 'title' && e.key === 'Enter' && this.campaign) {
+      this.continueCampaign();
+      return;
+    }
+    if (!this.inLevel || !this.state) return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (!this.ui.overlayOpen) this.startWave();
+    } else if (e.key === 'Escape') {
+      if (this.ui.overlayOpen && this.state.phase === 'prep') this.ui.closeOverlay();
+      this.select(null);
+    } else if (['1', '2', '3'].includes(e.key) && this.battle) {
+      this.speed = [1, 2, 4][Number(e.key) - 1];
+      this.ui.setSpeedLabel(this.speed);
+      this.ui.render(this.state, null, this.battle);
+    } else if (['q', 'w', 'e'].includes(e.key.toLowerCase()) && !this.battle && this.state.phase === 'prep') {
+      const stance = ({ q: 'hold', w: 'advance', e: 'assault' } as const)[e.key.toLowerCase() as 'q' | 'w' | 'e'];
+      this.doSetStance(stance);
+      this.ui.render(this.state, this.selection, null);
+    } else if (e.key === 'u' && this.selection) {
+      if (isCastleTile(this.selection.i, this.selection.j)) this.doUpgradeCastle();
+      else this.doUpgrade();
+    }
   }
 
   private loop(): void {
     const now = performance.now();
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const frameTime = (now - this.last) / 1000;
+    const dt = Math.min(0.1, frameTime);
     this.last = now;
-    const renderer = this.world.renderer;
+    if (this.frameWatch?.sample(frameTime)) {
+      saveQuality('low');
+      this.setQuality('low');
+      this.ui.toast('畫面不夠流暢，已自動開啟效能模式（可在音樂、音效按鈕旁切換）', '', 6000);
+    }
+    const world = this.world;
 
     switch (this.mode) {
       case 'cutscene': {
@@ -595,23 +632,23 @@ class App {
         this.cui.updateCutscene(frame);
         if (this.cutscene.finished) this.endCutscene();
         const target = this.cutscene.target;
-        renderer.render(target.scene, target.camera);
+        world.draw(target.scene, target.camera);
         break;
       }
       case 'map':
         this.map.update(dt);
         this.cui.updateLabels(this.map.labelPositions());
-        renderer.render(this.map.scene, this.map.camera);
+        world.draw(this.map.scene, this.map.camera);
         break;
       case 'title':
       case 'farewell':
         this.map.update(dt);
-        renderer.render(this.map.scene, this.map.camera);
+        world.draw(this.map.scene, this.map.camera);
         break;
       case 'raceSelect':
         if (this.raceSelectMode === 'campaign') {
           this.map.update(dt);
-          renderer.render(this.map.scene, this.map.camera);
+          world.draw(this.map.scene, this.map.camera);
         } else {
           this.town.update(dt);
           this.fx.update(dt);
@@ -670,7 +707,7 @@ if (import.meta.env.DEV) {
     if (a.state.phase === 'prep') botPrepare(a.state, plan);
     a.refresh(false);
   };
-  Object.assign(window, { __app: app, __units: UNITS, __skipTo: devSkipTo });
+  Object.assign(window, { __app: app, __units: UNITS, __skipTo: devSkipTo, __presets: PRESETS });
 }
 app.init().catch((err) => {
   console.error(err);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GRID_RADIUS, SPAWN_X, TILE } from '../game/constants';
 import type { Assets } from './assets';
+import { PRESETS, type Quality } from './quality';
 import { buildScenery, ENV_STYLES, type BattleSetting } from './scenery';
 
 export const TILE_TOP = 0.2;
@@ -18,7 +19,7 @@ const VIEW_DIR = new THREE.Vector3(0.57, 0, 0.82).normalize().multiplyScalar(Mat
 VIEW_DIR.y = Math.sin(THREE.MathUtils.degToRad(50));
 
 export class World {
-  readonly renderer: THREE.WebGLRenderer;
+  renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
   readonly ground = new THREE.Group();
@@ -33,13 +34,14 @@ export class World {
   /** World units per CSS pixel after fitting. */
   unitsPerPixel = 0.05;
   private readonly target = new THREE.Vector3(14, 0, 0);
+  private frame = 0;
+  private lastScene: THREE.Scene | null = null;
 
-  constructor(container: HTMLElement) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+  constructor(
+    container: HTMLElement,
+    public quality: Quality,
+  ) {
+    this.renderer = this.createRenderer();
     container.appendChild(this.renderer.domElement);
 
     this.scene.background = new THREE.Color('#9fd3e8');
@@ -65,6 +67,42 @@ export class World {
 
     this.scene.add(this.ground, this.tiles, this.buildings, this.units, this.fx);
     this.resize();
+  }
+
+  private createRenderer(): THREE.WebGLRenderer {
+    const p = PRESETS[this.quality];
+    const r = new THREE.WebGLRenderer({ antialias: p.antialias, powerPreference: 'high-performance' });
+    r.setPixelRatio(Math.min(window.devicePixelRatio, p.maxPixelRatio));
+    r.shadowMap.enabled = true;
+    r.shadowMap.type = p.shadowType;
+    r.outputColorSpace = THREE.SRGBColorSpace;
+    return r;
+  }
+
+  /** Switch presets. Antialiasing is fixed per WebGL context, so this swaps in a new canvas and returns it. */
+  setQuality(q: Quality): HTMLCanvasElement | null {
+    if (q === this.quality) return null;
+    this.quality = q;
+    const old = this.renderer;
+    this.renderer = this.createRenderer();
+    old.domElement.replaceWith(this.renderer.domElement);
+    old.dispose();
+    old.forceContextLoss();
+    this.lastScene = null;
+    this.resize();
+    return this.renderer.domElement;
+  }
+
+  /** Draw any scene; the light preset only refreshes shadow maps every few frames. */
+  draw(scene: THREE.Scene, camera: THREE.Camera): void {
+    const preset = PRESETS[this.quality];
+    if (scene !== this.lastScene) setShadowSize(scene, preset.shadowMapSize);
+    const shadows = this.renderer.shadowMap;
+    shadows.autoUpdate = preset.shadowEvery <= 1;
+    if (!shadows.autoUpdate) shadows.needsUpdate = scene !== this.lastScene || this.frame % preset.shadowEvery === 0;
+    this.lastScene = scene;
+    this.frame++;
+    this.renderer.render(scene, camera);
   }
 
   resize(): void {
@@ -126,7 +164,7 @@ export class World {
   }
 
   render(): void {
-    this.renderer.render(this.scene, this.camera);
+    this.draw(this.scene, this.camera);
   }
 
   /** Project a world point to CSS pixel coordinates. */
@@ -161,6 +199,17 @@ export class World {
 }
 
 export const CLASSIC_SETTING: BattleSetting = { terrain: 'plains', faction: 'undead', race: 'human' };
+
+/** Resize the sun's shadow map in a scene (the render target is recreated on the next frame). */
+function setShadowSize(scene: THREE.Scene, size: number): void {
+  scene.traverse((o) => {
+    const light = o as THREE.DirectionalLight;
+    if (!light.isDirectionalLight || !light.castShadow || light.shadow.mapSize.x === size) return;
+    light.shadow.mapSize.set(size, size);
+    light.shadow.map?.dispose();
+    light.shadow.map = null;
+  });
+}
 
 /** Frees the GPU resources owned by generated meshes (shared pack geometry is left alone). */
 function disposeTree(root: THREE.Object3D): void {

@@ -74,6 +74,8 @@ export interface UiActions {
   continueEndless(): void;
   toggleMusic(): boolean;
   toggleSfx(): boolean;
+  /** Flips 效能模式 and returns whether it is now on. */
+  toggleQuality(): boolean;
   deselect(): void;
   /** Campaign levels: give up and return to the world map. */
   retreat(): void;
@@ -159,6 +161,7 @@ export class Ui {
   private buildTab: BuildTab = 'all';
   private mouse = { x: -1000, y: -1000 };
   audio: AudioState = { music: true, sfx: true };
+  lowQuality = false;
   /** Rendered portraits of each race's mascot unit for the race picker. */
   portraits = new Map<RaceId, string>();
   /** Rendered building pictures for the build list and building panels. */
@@ -205,10 +208,10 @@ export class Ui {
     this.loading.classList.add('hidden');
   }
 
-  toast(msg: string, kind: 'bad' | 'good' | '' = ''): void {
+  toast(msg: string, kind: 'bad' | 'good' | '' = '', ms = 2200): void {
     const t = h('div', { class: `toast ${kind}` }, msg);
     this.toasts.append(t);
-    setTimeout(() => t.remove(), 2200);
+    setTimeout(() => t.remove(), ms);
     while (this.toasts.children.length > 4) this.toasts.firstChild?.remove();
   }
 
@@ -404,7 +407,7 @@ export class Ui {
       h(
         'div',
         { class: 'hud-actions' },
-        ...this.audioButtons(),
+        ...this.toggleButtons(),
         this.iconButton('help', '說明', () => this.showHelp(!!state.level)),
         state.level && state.phase === 'prep'
           ? h('button', { class: 'icon-btn text warn', onclick: () => this.confirmRetreat() }, icon('flag', 16, { strokeWidth: 2 }), '撤退')
@@ -441,8 +444,8 @@ export class Ui {
     return h('button', { class: 'icon-btn', 'aria-label': label, title: label, onclick }, icon(name, 18));
   }
 
-  /** Separate music and sound-effect toggles. */
-  audioButtons(): HTMLElement[] {
+  /** Music, sound-effect and 效能模式 toggles. */
+  toggleButtons(): HTMLElement[] {
     const make = (kind: 'music' | 'sfx') => {
       const on = () => (kind === 'music' ? this.audio.music : this.audio.sfx);
       const label = kind === 'music' ? '背景音樂' : '音效';
@@ -460,7 +463,26 @@ export class Ui {
       paint();
       return btn;
     };
-    return [make('music'), make('sfx')];
+    const quality = h('button', { class: 'icon-btn', 'data-quality': '' }, icon('gauge', 18));
+    quality.addEventListener('click', () => {
+      this.lowQuality = this.actions.toggleQuality();
+      this.toast(this.lowQuality ? '效能模式：開（降低畫質換取流暢度）' : '效能模式：關（高畫質）');
+    });
+    this.paintQuality(quality);
+    return [make('music'), make('sfx'), quality];
+  }
+
+  private paintQuality(btn: Element): void {
+    const label = `效能模式：${this.lowQuality ? '開' : '關'}`;
+    btn.classList.toggle('on', this.lowQuality);
+    btn.setAttribute('title', label);
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('aria-pressed', String(this.lowQuality));
+  }
+
+  /** Refresh every 效能模式 button on screen (title, map and battle bars). */
+  paintQualityButtons(): void {
+    document.querySelectorAll('[data-quality]').forEach((b) => this.paintQuality(b));
   }
 
   private confirmRetreat(): void {
