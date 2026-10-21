@@ -161,6 +161,8 @@ export class Ui {
   audio: AudioState = { music: true, sfx: true };
   /** Rendered portraits of each race's mascot unit for the race picker. */
   portraits = new Map<RaceId, string>();
+  /** Rendered building pictures for the build list and building panels. */
+  thumbs: { get(defId: string, race: RaceId): string | undefined } | null = null;
   /** Live battle readouts refreshed by updateBattle(). */
   private live: {
     allies?: HTMLElement;
@@ -661,11 +663,16 @@ export class Ui {
 
   private buildPanel(state: GameState, sel: Selection): Node[] {
     const all = availableBuildings(state);
-    const hasSpecials = all.some((b) => b.campaignOnly);
+    // Only what can be built now: castle-level locks and specials already placed stay out of the list.
+    const buildable = all.filter((b) => b.castleLevel <= state.castleLevel && !(b.campaignOnly && state.tiles.some((t) => t.building?.defId === b.id)));
+    const hasSpecials = buildable.some((b) => b.campaignOnly);
     if (this.buildTab === 'special' && !hasSpecials) this.buildTab = 'all';
     const tab = this.buildTab;
-    const shown = all.filter((b) => (tab === 'all' ? true : tab === 'special' ? b.campaignOnly : !b.campaignOnly && (b.kind === tab || (tab === 'tower' && b.kind === 'support'))));
+    const inTab = (b: BuildingDef) => (tab === 'all' ? true : tab === 'special' ? !!b.campaignOnly : !b.campaignOnly && (b.kind === tab || (tab === 'tower' && b.kind === 'support')));
+    const shown = buildable.filter(inTab);
     const front = sel.i === Math.max(...state.tiles.filter((t) => t.owned).map((t) => t.i));
+    const nextLevel = Math.min(...all.filter((b) => b.castleLevel > state.castleLevel).map((b) => b.castleLevel));
+    const upcoming = Number.isFinite(nextLevel) ? all.filter((b) => b.castleLevel === nextLevel) : [];
     return [
       h(
         'div',
@@ -692,35 +699,41 @@ export class Ui {
           ),
         ),
       ),
-      h('div', { class: 'build-grid' }, shown.map((d) => this.buildCard(state, sel, d))),
+      shown.length
+        ? h('div', { class: 'build-grid' }, shown.map((d) => this.buildCard(state, sel, d)))
+        : h('div', { class: 'hint' }, '這個分類目前沒有可建造的建築。'),
+      upcoming.length
+        ? h(
+            'div',
+            { class: 'unlock-hint' },
+            icon('lock', 15),
+            h('span', {}, `主堡升到 Lv.${nextLevel} 解鎖：`, h('b', {}, upcoming.map((b) => b.name).join('、'))),
+          )
+        : null,
       h('p', { class: 'muted small foot' }, '相鄰的同類建築互相加成：兵營出兵 +15%、資源 +10%、塔 +10%。'),
-    ];
+    ].filter((n): n is HTMLDivElement => !!n);
   }
 
   private buildCard(state: GameState, sel: Selection, def: BuildingDef): HTMLElement {
-    const check = canBuild(state, sel.i, sel.j, def.id);
-    const locked = !check.ok && state.castleLevel < def.castleLevel;
-    const already = !!def.campaignOnly && state.tiles.some((t) => t.building?.defId === def.id);
-    const poor = !check.ok && !locked && !already;
+    const poor = !canBuild(state, sel.i, sel.j, def.id).ok;
     let sub: string;
-    if (already) sub = '本場已建造';
-    else if (locked) sub = `主堡 Lv.${def.castleLevel} 解鎖`;
-    else if (def.kind === 'barracks') {
+    if (def.kind === 'barracks') {
       const u = getUnit(def.unit!);
       sub = `${u.name}・${u.role}`;
     } else if (def.kind === 'resource') sub = `每波 +${def.income![0]} 金`;
     else if (def.kind === 'tower') sub = `射程 ${def.tower!.range}${def.tower!.canHitAir ? '・對空' : ''}${def.tower!.splash ? '・範圍' : ''}`;
     else sub = firstClause(def.desc);
     const kind = def.campaignOnly ? 'special' : def.kind;
+    const thumb = this.thumbs?.get(def.id, state.race);
     const card = h(
       'button',
       {
-        class: `bcard kind-${kind} ${locked ? 'locked' : ''} ${poor ? 'poor' : ''} ${already ? 'done' : ''}`,
-        disabled: locked || already,
+        class: `bcard kind-${kind} ${poor ? 'poor' : ''}`,
         onclick: () => this.actions.build(def.id),
       },
-      h('span', { class: 'bc-top' }, h('span', { class: 'k' }, def.campaignOnly ? `特殊・${KIND_LABEL[def.kind as keyof typeof KIND_LABEL]}` : KIND_LABEL[def.kind as keyof typeof KIND_LABEL]), h('span', { class: 'cost num' }, coin(), String(buildCost(state, def)))),
-      h('span', { class: 'nm' }, locked ? icon('lock', 13) : null, def.name),
+      h('span', { class: 'bc-top' }, h('span', { class: 'k' }, def.campaignOnly ? '特殊' : KIND_LABEL[def.kind as keyof typeof KIND_LABEL]), h('span', { class: 'cost num' }, coin(), String(buildCost(state, def)))),
+      thumb ? h('span', { class: 'bc-img' }, h('img', { src: thumb, alt: '', draggable: 'false' })) : null,
+      h('span', { class: 'nm' }, def.name),
       h('span', { class: 'sb' }, sub),
     );
     return this.tip(card, () => this.buildingTip(def));
@@ -745,6 +758,12 @@ export class Ui {
   private unitTip(u: UnitDef): string {
     const tags = unitTags(u);
     return `<b>${u.name}</b>・${u.role}<br>${u.desc}<br><span class="muted">生命 ${u.hp}・攻擊 ${u.damage}${u.damageType === 'magic' ? '（魔法）' : ''}・每 ${u.attackInterval} 秒・射程 ${u.range}・移速 ${u.speed}${u.armor ? `・護甲 ${pct(u.armor)}` : ''}${u.evasion ? `・閃避 ${pct(u.evasion)}` : ''}${u.canHitAir ? '・可對空' : ''}${tags.length ? `<br>${tags.join('・')}` : ''}</span>`;
+  }
+
+  /** Large building picture on top of a building panel. */
+  private hero(defId: string, race: RaceId): HTMLElement[] {
+    const src = this.thumbs?.get(defId, race);
+    return src ? [h('div', { class: 'bp-hero' }, h('img', { src, alt: '', draggable: 'false' }))] : [];
   }
 
   private levelStars(level: number, max: number): HTMLElement {
@@ -804,6 +823,7 @@ export class Ui {
     const up = canUpgrade(state, sel.i, sel.j);
     const kindLabel = def.campaignOnly ? '特殊建築' : KIND_LABEL[def.kind as keyof typeof KIND_LABEL];
     const nodes: Node[] = [
+      ...this.hero(def.id, state.race),
       h('div', { class: 'p-head' }, h('div', { class: 'eyebrow' }, kindLabel), h('div', { class: 'title-row' }, h('h2', {}, def.name), this.levelStars(b.level, MAX_BUILDING_LEVEL))),
       h('p', {}, def.desc),
       this.stats(rows),
@@ -842,6 +862,7 @@ export class Ui {
     const unlocks = raceBuildings(state.race).filter((b) => b.castleLevel === next);
     const repair = fullRepairCost(state);
     const nodes: Node[] = [
+      ...this.hero('castle', state.race),
       h('div', { class: 'p-head' }, h('div', { class: 'eyebrow' }, '主堡'), h('div', { class: 'title-row' }, h('h2', {}, r.castleName), this.levelStars(state.castleLevel, CASTLE.maxLevel))),
       h('p', {}, '主堡被摧毀就失敗。主堡等級決定能建造哪些建築、建築能升到幾級，以及可以擴張多少土地。'),
       this.stats([

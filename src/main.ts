@@ -45,7 +45,7 @@ import { BattleView } from './render/battleView';
 import { Cutscene } from './render/cutscene';
 import { Effects } from './render/effects';
 import { MapView } from './render/mapView';
-import { renderRacePortraits } from './render/portraits';
+import { BuildingThumbs, renderRacePortraits } from './render/portraits';
 import { TownView } from './render/town';
 import { CLASSIC_SETTING, World } from './render/world';
 import { CampaignUi } from './ui/campaignUi';
@@ -66,6 +66,7 @@ class App {
   private battleView!: BattleView;
   private map!: MapView;
   private cutscene!: Cutscene;
+  private thumbs!: BuildingThumbs;
   private mode: Mode = 'loading';
   private raceSelectMode: 'campaign' | 'classic' = 'campaign';
   private campaign: CampaignState | null = null;
@@ -136,6 +137,8 @@ class App {
     this.map = new MapView(this.assets);
     this.cutscene = new Cutscene(this.assets, this.map);
     this.ui.portraits = renderRacePortraits(this.assets);
+    this.thumbs = new BuildingThumbs(this.assets);
+    this.ui.thumbs = this.thumbs;
     this.campaign = loadCampaign();
     this.bindInput();
     window.addEventListener('resize', () => this.onResize());
@@ -212,6 +215,7 @@ class App {
       this.startCutscene('intro');
       return;
     }
+    this.thumbs.prepare(race);
     this.state = newGame(race);
     this.levelId = null;
     this.selection = null;
@@ -293,6 +297,7 @@ class App {
     const t = getTerritory(id);
     this.endBattle();
     this.levelId = id;
+    this.thumbs.prepare(c.race);
     this.state = createLevelState(c, id, Date.now() % 1_000_000);
     this.selection = null;
     this.world.buildEnvironment(this.assets, { terrain: t.terrain, faction: t.faction ?? 'undead', race: c.race });
