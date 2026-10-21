@@ -68,14 +68,14 @@ export class SoftParticles {
   private cursor = 0;
   private readonly material: THREE.ShaderMaterial;
 
-  constructor(additive = true) {
+  constructor(additive = true, opacity = 1) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('size', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('alpha', new THREE.BufferAttribute(this.alpha, 1).setUsage(THREE.DynamicDrawUsage));
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uScale: { value: 400 } },
+      uniforms: { uScale: { value: 400 }, uOpacity: { value: opacity } },
       vertexShader: `
         attribute float size; attribute float alpha; attribute vec3 color;
         varying float vAlpha; varying vec3 vColor; uniform float uScale;
@@ -86,11 +86,11 @@ export class SoftParticles {
           gl_PointSize = size * uScale / max(0.1, -mv.z);
         }`,
       fragmentShader: `
-        varying float vAlpha; varying vec3 vColor;
+        varying float vAlpha; varying vec3 vColor; uniform float uOpacity;
         void main() {
           float d = length(gl_PointCoord - 0.5);
           if (d > 0.5) discard;
-          gl_FragColor = vec4(vColor, vAlpha * smoothstep(0.5, 0.1, d));
+          gl_FragColor = vec4(vColor, uOpacity * vAlpha * smoothstep(0.5, 0.0, d));
         }`,
       transparent: true,
       depthWrite: false,
@@ -126,6 +126,12 @@ export class SoftParticles {
       const v = new THREE.Vector3(Math.cos(a) * s, up * (1 + Math.random() * 2), Math.sin(a) * s);
       this.emit(at, v, c, size * (0.6 + Math.random() * 0.8), life * (0.6 + Math.random() * 0.6), gravity);
     }
+  }
+
+  clear(): void {
+    this.life.fill(0);
+    this.alpha.fill(0);
+    this.points.geometry.getAttribute('alpha').needsUpdate = true;
   }
 
   update(dt: number): void {

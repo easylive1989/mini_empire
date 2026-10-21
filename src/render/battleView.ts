@@ -288,6 +288,20 @@ export class BattleView {
           break;
         case 'towerAttack':
           break;
+        case 'steal':
+          this.fx.rise(ev.x, 1.2, ev.z, '#facc15', 10, 0.35, 0.8);
+          this.fx.burst(ev.x, 1.5, ev.z, '#fde047', 6, 2, 0.3, 0.5, 2);
+          this.sounds.play('coin', ev.x);
+          break;
+        case 'enrage': {
+          const e = b.getEntity(ev.id);
+          if (e) {
+            this.fx.ring(e.x, e.z, 6, '#ef4444', 1.2);
+            this.fx.burst(e.x, 1.5, e.z, '#dc2626', 40, 5, 0.6, 1, 2);
+          }
+          this.sounds.play('boss', e?.x);
+          break;
+        }
       }
     }
   }

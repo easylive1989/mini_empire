@@ -89,6 +89,7 @@ export class World {
       new THREE.Vector3(r, 0, r),
       new THREE.Vector3(SPAWN_X - 3, 0, -7),
       new THREE.Vector3(SPAWN_X - 8, 0, 8),
+      new THREE.Vector3(SPAWN_X + 5, 0, 0),
     ];
     const inv = cam.matrixWorldInverse;
     let minX = Infinity;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, simulateBattle } from '../src/game/battle';
+import { Battle, simulateBattle, waveForState } from '../src/game/battle';
 import {
   campaignPerks,
   campaignUnlocks,
@@ -25,7 +25,7 @@ import {
   territoryTier,
 } from '../src/game/campaign/territories';
 import { BUILDINGS, getUnit, UNITS } from '../src/game/data/index';
-import { applyBattleOutcome, availableBuildings, build, canBuild, getModifiers, upgradeCastle } from '../src/game/state';
+import { applyBattleOutcome, availableBuildings, build, canBuild, getModifiers, newGame, upgradeCastle } from '../src/game/state';
 
 function memoryStore(): KeyValueStore {
   const m = new Map<string, string>();
@@ -220,6 +220,28 @@ describe('faction mechanics', () => {
     expect(boss.enraged).toBe(true);
     expect(b.entities.filter((e) => e.def.id === 'o_berserker').length).toBe(3);
     expect(b.entities.length).toBe(before + 3);
+  });
+
+  it('orc shaman war cries do not stack', () => {
+    const b = level('t_ember');
+    const grunt = b.spawnEnemy('o_grunt');
+    for (let k = 0; k < 6; k++) {
+      const sh = b.spawnEnemy('o_shaman');
+      sh.x = grunt.x;
+      sh.z = grunt.z + 1;
+    }
+    b.step();
+    // One shaman's +25% damage, not 1.25^6.
+    expect(grunt.dmgMult / b.mods.enemyDmgMult).toBeLessThan(1.3);
+    expect(grunt.dmgMult).toBeGreaterThan(1.2);
+  });
+
+  it('a game state knows which wave it faces next', () => {
+    const s = createLevelState(newCampaign('elf'), 't_whisper', 1);
+    expect(waveForState(s).groups.every((g) => g.unit.startsWith('g_'))).toBe(true);
+    s.wave = 99;
+    expect(waveForState(s).boss).toBe('g_king');
+    expect(waveForState(newGame('elf', 1)).groups.every((g) => g.unit.startsWith('m_'))).toBe(true);
   });
 
   it('terrain changes enemy stats (swamp slows everyone)', () => {

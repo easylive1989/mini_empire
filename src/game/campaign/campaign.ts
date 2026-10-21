@@ -2,7 +2,7 @@ import { CASTLE } from '../constants';
 import { castleMaxHp, CAMPAIGN_ECONOMY, newGame, type GameState } from '../state';
 import type { RaceId } from '../types';
 import { territoryWaveCount } from './campaignWaves';
-import { PERK_MAP } from './perks';
+import { PERK_MAP, type PerkDef } from './perks';
 import { CAPITAL_TERRITORY, getTerritory, neighbours, START_TERRITORY, TERRITORIES, territoryTier } from './territories';
 
 export interface CampaignState {
@@ -107,6 +107,10 @@ export function isAttackable(c: CampaignState, id: string): boolean {
 
 export function campaignPerks(c: CampaignState): string[] {
   return c.conquered.map((id) => getTerritory(id).reward.perk).filter((p): p is string => !!p);
+}
+
+export function campaignPerkDefs(perks: string[]): PerkDef[] {
+  return perks.map((p) => PERK_MAP.get(p)).filter((p): p is PerkDef => !!p);
 }
 
 export function campaignUnlocks(c: CampaignState): string[] {

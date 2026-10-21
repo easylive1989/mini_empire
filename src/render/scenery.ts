@@ -214,8 +214,8 @@ export function buildScenery(group: THREE.Group, assets: Assets, setting: Battle
   const scatter = (kinds: [Pack, string, number][], count: number) => {
     let placed = 0;
     for (let k = 0; k < count * 6 && placed < count; k++) {
-      const x = -40 + rng.next() * 110;
-      const z = -40 + rng.next() * 80;
+      const x = -32 + rng.next() * 92;
+      const z = -30 + rng.next() * 60;
       if (!free(x, z)) continue;
       const [pack, key, scale] = kinds[rng.int(kinds.length)];
       add(pack, key, x, z, scale * (0.85 + rng.next() * 0.4));
@@ -258,10 +258,19 @@ export function buildScenery(group: THREE.Group, assets: Assets, setting: Battle
       }
       break;
     case 'town': {
-      scatter(trees, 50);
-      const homes = ['home_A', 'home_B', 'well', 'market', 'home_A', 'tavern', 'home_B', 'church'];
-      homes.forEach((key, k) => addBuilding(key, -24 + (k % 4) * 5.5, (k < 4 ? -18 : 18) + (rng.next() - 0.5) * 2, k < 4 ? 0 : Math.PI));
-      for (let k = 0; k < 6; k++) add('env', 'fence_stone_straight', -27 + k * 4.2, -14.5, 2.2, 0);
+      scatter(trees, 45);
+      const homes: [string, number, number][] = [
+        ['home_A', -17, -14],
+        ['home_B', -10, -16],
+        ['well', -4, -15],
+        ['market', 3, -17],
+        ['home_A', 10, -17],
+        ['tavern', -18, 9],
+        ['home_B', -13, 15],
+        ['church', -21, -3],
+      ];
+      homes.forEach(([key, x, z]) => addBuilding(key, x, z, z < 0 ? 0 : Math.PI));
+      for (let k = 0; k < 5; k++) add('env', 'fence_stone_straight', -18 + k * 4.2, -12, 2.2, 0);
       mountains();
       break;
     }
@@ -269,30 +278,23 @@ export function buildScenery(group: THREE.Group, assets: Assets, setting: Battle
       scatter([...trees, ['env', 'trees_A_large', 2.2], ['env', 'trees_B_large', 2.2], ['env', 'trees_A_large', 2.2]], 170);
       break;
     case 'hills':
-      scatter([...trees, ['env', 'hills_A_trees', 3.2], ['env', 'hills_B', 3.2], ['env', 'hill_single_C', 3.6], ['env', 'hill_single_A', 3.6]], 110);
+      scatter([...trees, ...rocks, ['env', 'trees_A_large', 2.2]], 110);
       mountains();
       break;
     case 'swamp':
       scatter([...deadTrees, ['env', 'waterlily_A', 2.4], ['env', 'waterplant_A', 2.4], ['env', 'waterplant_B', 2.4], ['env', 'trees_B_small', 1.8]], 120);
       break;
     case 'mountain':
-      scatter([...rocks, ['env', 'tree_single_B', 1.8], ['env', 'mountain_C_grass', 4], ['env', 'mountain_A', 4.2]], 80);
-      add('env', 'mountain_A', -30, -30, 7);
-      add('env', 'mountain_A', -12, -40, 8);
-      add('env', 'mountain_C_grass', 18, -38, 7);
-      add('env', 'mountain_A', -36, 20, 6);
+      scatter([...rocks, ...rocks, ['env', 'tree_single_B', 1.9], ['env', 'trees_B_medium', 1.9]], 110);
+      mountains();
       break;
     case 'badlands':
-      scatter([...rocks, ...deadTrees, ['halloween', 'skull', 1.2], ['halloween', 'ribcage', 1.1]], 80);
-      add('env', 'mountain_A', -30, -30, 6.5);
-      add('env', 'mountain_A', 10, -42, 7);
+      scatter([...rocks, ...deadTrees, ['halloween', 'skull', 1.2], ['halloween', 'ribcage', 1.1]], 90);
       break;
     case 'mine':
-      scatter([...rocks, ['env', 'resource_stone', 2.6], ['env', 'tree_single_B', 1.8], ['env', 'wheelbarrow', 2.2]], 90);
-      addBuilding('mine', -22, -18, 0.4, 1);
-      addBuilding('mine', -14, 20, Math.PI, 1);
-      add('env', 'mountain_A', -30, -32, 7);
-      add('env', 'mountain_C_grass', -10, -40, 7);
+      scatter([...rocks, ...rocks, ['env', 'resource_stone', 2.6], ['env', 'tree_single_B', 1.8], ['env', 'wheelbarrow', 2.2]], 100);
+      addBuilding('mine', -16, -14, 0.4, 1);
+      addBuilding('mine', -16, 13, Math.PI, 1);
       break;
     case 'graveyard':
       scatter(
@@ -302,14 +304,14 @@ export function buildScenery(group: THREE.Group, assets: Assets, setting: Battle
       break;
     case 'holy':
       scatter([...trees, ['dungeon', 'pillar_decorated', 1.6], ['dungeon', 'column', 1.6]], 80);
-      addBuilding('church', -22, -18, 0.3, 1);
-      add('halloween', 'shrine_candles', -16, 17, 1.2, Math.PI);
+      addBuilding('church', -16, -14, 0.3, 1);
+      add('halloween', 'shrine_candles', -14, 13, 1.2, Math.PI);
       break;
     case 'capital': {
-      scatter([...deadTrees, ['env', 'building_destroyed', 2.2], ['dungeon', 'rubble_large', 1.8], ['dungeon', 'torch_lit', 1.6]], 70);
-      for (let k = 0; k < 7; k++) add('env', k === 3 ? 'wall_straight_gate' : 'wall_straight', -30 + k * 4.4, -17, 2.2, 0);
-      add('env', 'wall_corner_A_outside', 1, -17, 2.2, 0);
-      for (let k = 0; k < 4; k++) add('dungeon', 'banner_patternA_red', -27 + k * 8, -16.2, 1.6, 0);
+      scatter([...deadTrees, ['env', 'building_destroyed', 2.2], ['dungeon', 'rubble_large', 1.0], ['dungeon', 'torch_lit', 1.6]], 70);
+      for (let k = 0; k < 7; k++) add('env', k === 3 ? 'wall_straight_gate' : 'wall_straight', -26 + k * 4.4, -14, 2.2, 0);
+      add('env', 'wall_corner_A_outside', 5, -14, 2.2, 0);
+      for (let k = 0; k < 4; k++) add('dungeon', 'banner_patternA_red', -23 + k * 8, -13.2, 1.2, 0);
       break;
     }
   }

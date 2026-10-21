@@ -181,6 +181,11 @@ function dist2(ax: number, az: number, bx: number, bz: number): number {
   return dx * dx + dz * dz;
 }
 
+/** The wave a game state is about to fight (campaign territory or classic mode). */
+export function waveForState(state: GameState): WaveDef {
+  return state.level ? getCampaignWave(state.level.territoryId, Math.min(state.wave, state.level.totalWaves)) : getWave(state.wave);
+}
+
 export class Battle {
   readonly state: GameState;
   readonly mods: Modifiers;
@@ -216,7 +221,7 @@ export class Battle {
     this.state = state;
     this.mods = getModifiers(state);
     this.wave = state.wave;
-    this.waveDef = state.level ? getCampaignWave(state.level.territoryId, state.wave) : getWave(state.wave);
+    this.waveDef = waveForState(state);
     this.rng = new Rng(state.seed ^ (state.wave * 0x9e3779b1));
     let maxI = 1;
     for (const t of state.tiles) if (t.owned) maxI = Math.max(maxI, t.i);
@@ -1462,7 +1467,10 @@ export class Battle {
         if (b.healTimer <= 0) {
           b.healTimer = 0.5;
           for (const a of this.alliesInRadius('player', b.x, b.z, sp.radius)) {
-            if (a.hp < a.maxHp) a.hp = Math.min(a.maxHp, a.hp + a.maxHp * sp.pctPerSec[b.level - 1] * 0.5 * this.mods.healMult);
+            if (a.hp >= a.maxHp) continue;
+            const amount = Math.min(a.maxHp - a.hp, a.maxHp * sp.pctPerSec[b.level - 1] * 0.5 * this.mods.healMult);
+            a.hp += amount;
+            if (this.rng.chance(0.25)) this.events.push({ type: 'heal', id: a.id, amount });
           }
         }
       }

@@ -227,6 +227,11 @@ export class Music {
     const ctx = this.ctx;
     const tr = this.track;
     if (!ctx || !tr || !this.bus) return;
+    // Wait for the first user gesture before scheduling anything.
+    if (ctx.state !== 'running') {
+      this.nextTime = ctx.currentTime + 0.1;
+      return;
+    }
     const stepDur = 60 / tr.bpm / 4;
     while (this.nextTime < ctx.currentTime + 0.2) {
       this.playStep(tr, this.step, this.nextTime, stepDur);

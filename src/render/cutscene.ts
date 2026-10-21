@@ -132,7 +132,7 @@ export class Cutscene {
   readonly camera = new THREE.PerspectiveCamera(40, 1, 0.3, 400);
   private readonly stage = new THREE.Group();
   private readonly fire = new SoftParticles(true);
-  private readonly smoke = new SoftParticles(false);
+  private readonly smoke = new SoftParticles(false, 0.32);
   private readonly lights: { hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight };
   private readonly glow = new THREE.PointLight('#ff6a2a', 0, 40, 1.5);
   private actors: Actor[] = [];
@@ -176,6 +176,12 @@ export class Cutscene {
     this.next();
   }
 
+  /** Jumps to a shot (used by automated screenshots). */
+  jump(index: number): void {
+    this.index = index - 1;
+    this.next();
+  }
+
   skip(): void {
     this.finished = true;
     this.clearStage();
@@ -211,6 +217,8 @@ export class Cutscene {
 
   private clearStage(): void {
     this.stage.clear();
+    this.fire.clear();
+    this.smoke.clear();
     this.actors = [];
     this.glow.intensity = 0;
   }
@@ -294,18 +302,18 @@ export class Cutscene {
   /** The kingdom's capital: castle, walls, houses and trees. */
   private kingdom(ruined = false): { fires: THREE.Vector3[] } {
     const race = this.race;
-    this.ground(6, ruined ? '#9a8f88' : '#ffffff');
+    this.ground(8, ruined ? '#8a8a78' : '#a6d98a');
     this.model('buildings', 'castle', 0, -5, 2.2, 0, ruined ? 'shadow' : race);
     const fires: THREE.Vector3[] = [new THREE.Vector3(0, 6, -5)];
     const houses: [string, number, number, number][] = [
       ['home_A', -8, -4, 0.4],
-      ['home_B', -10, 1, 1.2],
+      ['home_B', -11, -1, 1.2],
       ['tavern', 8, -3, -0.5],
-      ['home_A', 10, 2, -1.2],
-      ['market', -6, 5, 0.2],
-      ['home_B', 6, 6, -0.3],
-      ['church', -3, -11, 0],
-      ['windmill', 11, -9, 0],
+      ['home_A', 11, -1, -1.2],
+      ['market', -9, -9, 0.2],
+      ['home_B', 8, -9, -0.3],
+      ['church', -3, -12, 0],
+      ['windmill', 14, -11, 0],
     ];
     for (const [key, x, z, rot] of houses) {
       if (ruined && (key === 'home_A' || key === 'tavern')) this.model('env', 'building_destroyed', x, z, 2, rot);
@@ -314,9 +322,9 @@ export class Cutscene {
     }
     for (let k = -3; k <= 3; k++) if (k !== 0) this.model('env', 'wall_straight', k * 2.3, 0.5, 1.15, 0);
     this.model('env', 'wall_straight_gate', 0, 0.5, 1.15, 0);
-    const trees: [number, number][] = [[-13, -6], [13, 6], [-12, 8], [-4, 10], [14, -2], [3, -14], [-14, -11]];
+    const trees: [number, number][] = [[-14, -6], [13, -7], [-16, 4], [16, 3], [3, -15], [-15, -12], [11, -15], [-18, -3]];
     for (const [x, z] of trees) this.model(ruined ? 'halloween' : 'env', ruined ? 'tree_dead_medium' : 'trees_A_medium', x, z, ruined ? 1.1 : 2.4);
-    for (const x of [-4.6, 4.6]) this.model('dungeon', ruined ? 'banner_patternA_red' : 'banner_patternA_blue', x, 0.9, 1.6);
+    for (const x of [-4.6, 4.6]) this.model('dungeon', ruined ? 'banner_patternA_red' : 'banner_patternA_blue', x, 0.9, 0.75);
     return { fires };
   }
 
@@ -353,17 +361,19 @@ export class Cutscene {
           () => {
             this.kingdom();
             this.mood('day');
-            const king = this.actor(this.royal('king'), 0, 2.2);
-            king.face(0, 10);
+            const king = this.actor(this.royal('king'), 0, 2.4);
+            king.face(0, 12);
+            for (const x of [-1.6, 1.6]) this.actor(units()[0], x, 2.2).face(0, 12);
             walkers = [];
             const list = units();
-            for (let k = 0; k < 9; k++) {
+            for (let k = 0; k < 8; k++) {
               const a = this.actor(list[k % list.length], 0, 0);
-              walkers.push({ a, cx: (k % 3) * 6 - 6, cz: 6 + Math.floor(k / 3) * 2.5, r: 2 + (k % 2), ph: k * 1.3, sp: 0.35 + (k % 3) * 0.1 });
+              const side = k % 2 ? 1 : -1;
+              walkers.push({ a, cx: side * (7 + (k % 3) * 1.5), cz: 5 + Math.floor(k / 2) * 1.6, r: 1.6 + (k % 3) * 0.6, ph: k * 1.3, sp: (0.35 + (k % 3) * 0.1) * side });
             }
-            for (let k = 0; k < 4; k++) {
-              const a = this.actor(list[(k + 2) % list.length], -3 + k * 2, 3.6);
-              a.face(0, 2.2);
+            for (let k = 0; k < 5; k++) {
+              const a = this.actor(list[(k + 2) % list.length], -4 + k * 2, 6.5 + (k % 2) * 0.8);
+              a.face(0, 2.4);
               a.play('Cheer');
             }
           },
@@ -372,11 +382,13 @@ export class Cutscene {
               const ang = w.ph + t * w.sp;
               const x = w.cx + Math.cos(ang) * w.r;
               const z = w.cz + Math.sin(ang) * w.r;
-              w.a.face(w.cx + Math.cos(ang + 0.1) * w.r, w.cz + Math.sin(ang + 0.1) * w.r).at(x, z);
+              const ahead = ang + 0.1 * Math.sign(w.sp);
+              w.a.face(w.cx + Math.cos(ahead) * w.r, w.cz + Math.sin(ahead) * w.r).at(x, z);
               w.a.play('Walking_A');
             }
-            const ang = 0.9 - t * 0.05;
-            this.camera3(new THREE.Vector3(Math.sin(ang) * (30 - t), 16 - t * 0.6, Math.cos(ang) * (30 - t)), new THREE.Vector3(0, 2, 0));
+            const ang = 0.55 - t * 0.04;
+            const d = 34 - t * 1.1;
+            this.camera3(new THREE.Vector3(Math.sin(ang) * d, 15 - t * 0.6, Math.cos(ang) * d), new THREE.Vector3(0, 2.5, -1));
           },
         );
       }
@@ -391,7 +403,7 @@ export class Cutscene {
             horde = [];
             const ids = ['m_minion', 'g_goblin', 'o_grunt', 'r_soldier', 'm_warrior', 'g_bomber', 'o_berserker', 'r_archer', 'm_rogue', 'o_brute'];
             for (let k = 0; k < 22; k++) {
-              const a = this.actor(getUnit(ids[k % ids.length]), 26 + (k % 5) * 2.2 + Math.random(), 4 + Math.floor(k / 5) * 2.2 + Math.random());
+              const a = this.actor(getUnit(ids[k % ids.length]), 18 + (k % 5) * 2.1 + Math.random(), 3 + Math.floor(k / 5) * 2.1 + Math.random());
               horde.push(a);
             }
             fleeing = [];
@@ -404,13 +416,13 @@ export class Cutscene {
             if (flash) this.lights.hemi.intensity = 3.5;
             for (const a of horde) {
               const p = a.root.position;
-              a.walk(Math.max(9, p.x - 30), p.z, 3, dt, 'Running_A');
+              a.walk(Math.max(7, p.x - 30), p.z, 2.4, dt, 'Running_A');
             }
             for (const a of fleeing) if (t > 2) a.walk(-30, a.root.position.z + 2, 4.5, dt, 'Running_A');
             if (t > 3.5) this.burn(fires, 60 * clamp01((t - 3.5) / 3), dt);
             this.glow.position.set(0, 6, -2);
             this.glow.intensity = 60 * clamp01((t - 3.5) / 3);
-            this.dolly(t, 9, [34, 6, 22, 26, 1.5, 6], [16, 9, 24, 2, 2, 0]);
+            this.dolly(t, 9, [34, 10, 30, 18, 1.5, 4], [18, 13, 30, 2, 2, -1]);
           },
         );
       }
@@ -471,8 +483,8 @@ export class Cutscene {
             });
             if (t > 7.3) king.play('Death_A', false);
             else if (t > 2.6) king.play(this.race === 'elf' ? 'Spellcast_Shoot' : '1H_Melee_Attack_Slice_Diagonal');
-            if (t < 7) this.dolly(t, 7, [-6, 2.2, 12, 6, 2, 3], [-3, 1.6, 9, 3, 1.6, 4]);
-            else this.dolly(t - 7, 4, [-3, 1.6, 9, 3, 1.6, 4], [-0.5, 1.1, 7.5, 1.5, 0.6, 4]);
+            if (t < 7) this.dolly(t, 7, [-9, 5, 15, 5, 2.5, 3], [-6, 3.5, 12.5, 4, 2.2, 3.5]);
+            else this.dolly(t - 7, 4, [-6, 3.5, 12.5, 4, 2.2, 3.5], [-2.5, 2, 9, 1.5, 0.8, 4]);
           },
         );
       }
@@ -504,21 +516,23 @@ export class Cutscene {
         let burst = false;
         return S(
           () => {
-            this.ground(4);
+            this.ground(5, '#a6d98a');
             this.mood('dawn');
             this.model('buildings', 'tower_A', -4, -5, 1.6, 0, this.race);
             this.model('buildings', 'home_A', 4, -5, 1.5, -0.4, this.race);
             this.model('buildings', 'home_B', -8, -1, 1.5, 0.6, this.race);
             this.model('env', 'fence_wood_straight', 6, 0, 2.2, Math.PI / 2);
-            this.model('dungeon', 'banner_patternA_blue', -2, -2.5, 1.7);
-            this.model('dungeon', 'banner_patternA_blue', 2, -2.5, 1.7);
+            this.model('dungeon', 'banner_patternA_blue', -2, -2.5, 0.8);
+            this.model('dungeon', 'banner_patternA_blue', 2, -2.5, 0.8);
             for (const [x, z] of [[-10, -8], [9, -9], [11, 3], [-11, 5]]) this.model('env', 'trees_B_medium', x, z, 2.3);
             prince = this.actor(this.royal('prince'), 0, -1);
             prince.face(0, 10);
             soldiers = [];
             const list = units();
             for (let k = 0; k < 8; k++) {
-              const a = this.actor(list[k % list.length], -5.25 + (k % 4) * 3.5, 4 + Math.floor(k / 4) * 2.6);
+              const side = k % 2 ? 1 : -1;
+              const row = Math.floor(k / 2);
+              const a = this.actor(list[k % list.length], side * (2.6 + (row % 2) * 0.6), 1.2 + row * 1.9);
               a.face(0, -1);
               soldiers.push(a);
             }
@@ -532,7 +546,7 @@ export class Cutscene {
               burst = true;
               this.fire.burst(new THREE.Vector3(0, 2.6, -1), '#ffe08a', 140, 5, 0.6, 1.8, 2, 2);
             }
-            this.dolly(t, 9, [0, 1.6, 16, 0, 1.6, 0], [0, 2.3, 6.5, 0, 1.9, -1]);
+            this.dolly(t, 9, [0, 2.6, 17, 0, 1.8, -1], [0, 2.1, 7, 0, 2, -1]);
           },
         );
       }

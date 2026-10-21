@@ -1,18 +1,18 @@
 // Campaign balance check: the bot liberates the map with two strategies and
 // reports how close each territory battle was.
-// Usage: npx vite-node tools/campaign-sim.ts   (env RACE=elf to filter)
+// Usage: npm run campaign-sim   (env RACE=elf to filter, STRAT=straight|full)
 import { simulateBattle } from '../src/game/battle';
 import { botPrepare } from '../src/game/bot';
 import { createLevelState, isAttackable, newCampaign, recordBattle, type CampaignState } from '../src/game/campaign/campaign';
 import { CAPITAL_TERRITORY, TERRITORIES, territoryTier } from '../src/game/campaign/territories';
 import { RACES } from '../src/game/data/index';
 import { DIFFICULTY } from '../src/game/data/waves';
-import { applyBattleOutcome, type GameState } from '../src/game/state';
+import { applyBattleOutcome } from '../src/game/state';
 
 const base = DIFFICULTY.base;
 
-/** Plays a whole territory battle; returns whether it was won and the castle HP left. */
-function playLevel(c: CampaignState, id: string, seed: number, mult = 1): { won: boolean; hp: number; kills: number } {
+/** Plays a whole territory battle with the bot; returns whether it was won. */
+function playLevel(c: CampaignState, id: string, seed: number, mult = 1): { won: boolean; kills: number } {
   DIFFICULTY.base = base * mult;
   const s = createLevelState(c, id, seed);
   const plan = { n: 0 };
@@ -25,7 +25,7 @@ function playLevel(c: CampaignState, id: string, seed: number, mult = 1): { won:
     applyBattleOutcome(s, b.outcome());
   }
   DIFFICULTY.base = base;
-  return { won: s.phase === 'victory', hp: s.castleHp / (s as GameState).castleHp, kills };
+  return { won: s.phase === 'victory', kills };
 }
 
 /** Largest enemy-strength multiplier the bot still beats this territory with. */

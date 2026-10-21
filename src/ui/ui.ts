@@ -2,7 +2,9 @@ import type { Battle } from '../game/battle';
 import { CASTLE, FINAL_WAVE, MAX_BUILDING_LEVEL, UNIT_LEVEL_MULT } from '../game/constants';
 import { BOON_MAP } from '../game/data/boons';
 import { BUILDINGS, getBuilding, getUnit, RACE_MAP, RACES, raceBuildings, raceUnits } from '../game/data/index';
-import { getWave } from '../game/data/waves';
+import { waveForState } from '../game/battle';
+import { campaignPerkDefs } from '../game/campaign/campaign';
+import { TERRAINS } from '../game/campaign/terrain';
 import {
   buildCost,
   buildingIncome,
@@ -22,34 +24,12 @@ import {
   projectedIncome,
   tileAt,
   tileBonuses,
+  availableBuildings,
   type GameState,
 } from '../game/state';
 import type { BuildingDef, RaceId, Stance, UnitDef } from '../game/types';
 
-type Child = Node | string | number | null | undefined | false;
-
-function h<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  props: Record<string, unknown> = {},
-  ...children: (Child | Child[])[]
-): HTMLElementTagNameMap[K] {
-  const el = document.createElement(tag);
-  for (const [k, v] of Object.entries(props)) {
-    if (v === undefined || v === null || v === false) continue;
-    if (k === 'class') el.className = String(v);
-    else if (k === 'style') el.setAttribute('style', String(v));
-    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v as EventListener);
-    else if (k === 'html') el.innerHTML = String(v);
-    else el.setAttribute(k, String(v));
-  }
-  for (const c of children.flat()) {
-    if (c === null || c === undefined || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
-  }
-  return el;
-}
-
-const coin = () => h('span', { class: 'coin' });
+import { coin, h } from './dom';
 
 export const STANCE_INFO: Record<Stance, { icon: string; name: string; desc: string }> = {
   hold: { icon: '🛡', name: '堅守', desc: '士兵留在防禦塔射程內，不追擊遠方的敵人；護甲 +15%。適合依賴防禦塔的陣容。' },
@@ -78,8 +58,18 @@ export interface UiActions {
   chooseBoon(id: string): void;
   backToTitle(): void;
   continueEndless(): void;
-  toggleMute(): boolean;
+  toggleMusic(): boolean;
+  toggleSfx(): boolean;
   deselect(): void;
+  /** Campaign levels: give up and return to the world map. */
+  retreat(): void;
+  retry(): void;
+  backToMap(): void;
+}
+
+export interface AudioState {
+  music: boolean;
+  sfx: boolean;
 }
 
 function unitTags(u: UnitDef): string[] {
@@ -112,6 +102,9 @@ const ENEMY_COLORS: Record<string, string> = {
   m_deathknight: '#ef4444',
 };
 
+/** Fallback dot colours for the campaign factions, by unit id prefix. */
+const FACTION_DOT: Record<string, string> = { g_: '#84cc16', o_: '#d97706', r_: '#f87171', b_: '#ef4444', sp: '#60a5fa' };
+
 function pct(x: number): string {
   return `${Math.round(x * 100)}%`;
 }
@@ -126,8 +119,9 @@ export class Ui {
   private readonly tooltip = h('div', { class: 'tooltip hidden' });
   private readonly loading = h('div', { class: 'loading' });
   private titleRace: RaceId = 'human';
+  private titleMode: 'campaign' | 'classic' = 'campaign';
   private speed = 1;
-  private muted = false;
+  audio: AudioState = { music: true, sfx: true };
   private battleStatus: HTMLElement | null = null;
   private liveBox: HTMLElement | null = null;
 
@@ -193,8 +187,10 @@ export class Ui {
 
   // ---------------------------------------------------------------- title
 
-  showTitle(race: RaceId = this.titleRace): void {
+  /** Race selection: for a new campaign, or for the unlocked classic mode. */
+  showTitle(race: RaceId = this.titleRace, mode: 'campaign' | 'classic' = this.titleMode): void {
     this.titleRace = race;
+    this.titleMode = mode;
     for (const p of [this.top, this.left, this.right, this.bottom]) p.classList.add('hidden');
     const r = RACE_MAP.get(race)!;
     const units = raceUnits(race);
@@ -202,8 +198,14 @@ export class Ui {
     const modal = h(
       'div',
       { class: 'modal' },
-      h('h1', { class: 'title-logo' }, '迷你帝國'),
-      h('p', { class: 'title-sub' }, '選擇你的種族，在九宮格領地上建立王國，抵禦一波波的亡靈大軍。撐過 30 波即可獲勝！'),
+      h('h1', { class: 'title-logo' }, mode === 'campaign' ? '選擇你的王國' : '無盡挑戰'),
+      h(
+        'p',
+        { class: 'title-sub' },
+        mode === 'campaign'
+          ? '王子將帶領哪一族的子民收復失土？種族決定你能使用的兵種與建築，整場戰役都無法更換。'
+          : '經典模式：在九宮格領地上建立王國，抵禦一波波的亡靈大軍。撐過 30 波即可獲勝！',
+      ),
       h(
         'div',
         { class: 'race-grid' },
@@ -249,11 +251,26 @@ export class Ui {
           h('p', { class: 'muted', style: 'font-size:12px;margin-top:10px' }, `招牌協同：${r.synergies[0].name} — ${r.synergies[0].desc}`),
         ),
       ),
-      h('button', { class: 'btn primary', style: 'font-size:18px;padding:14px;margin-top:18px', onclick: () => this.actions.startGame(race) }, `以${r.name}開始遊戲`),
+      h(
+        'div',
+        { style: 'display:flex;gap:10px;margin-top:18px' },
+        h('button', { class: 'btn', style: 'flex:0 0 140px;padding:14px', onclick: () => this.actions.backToTitle() }, '← 返回'),
+        h(
+          'button',
+          { class: 'btn primary', style: 'font-size:18px;padding:14px;flex:1', onclick: () => this.actions.startGame(race) },
+          mode === 'campaign' ? `以${r.name}展開復國之戰` : `以${r.name}開始遊戲`,
+        ),
+      ),
     );
     this.overlay.replaceChildren(modal);
     this.overlay.style.background = 'linear-gradient(180deg, rgba(12,10,9,0.15), rgba(12,10,9,0.7))';
     this.overlay.classList.remove('hidden');
+  }
+
+  /** Hides the in-game HUD panels and any modal. */
+  hideHud(): void {
+    for (const p of [this.top, this.left, this.right, this.bottom]) p.classList.add('hidden');
+    this.closeOverlay();
   }
 
   closeOverlay(): void {
@@ -278,8 +295,12 @@ export class Ui {
     const r = RACE_MAP.get(state.race)!;
     const max = castleMaxHp(state);
     const hpRatio = state.castleHp / max;
-    const wave = getWave(state.wave);
-    const waveText = state.wave > FINAL_WAVE ? `無盡模式・第 ${state.wave} 波` : `第 ${state.wave} / ${FINAL_WAVE} 波`;
+    const wave = waveForState(state);
+    const waveText = state.level
+      ? `${state.level.name}・第 ${Math.min(state.wave, state.level.totalWaves)} / ${state.level.totalWaves} 波`
+      : state.wave > FINAL_WAVE
+        ? `無盡模式・第 ${state.wave} 波`
+        : `第 ${state.wave} / ${FINAL_WAVE} 波`;
     this.top.replaceChildren(
       h('div', { class: 'race-badge' }, h('div', { class: 'race-dot' }), h('div', {}, `${r.name}`, h('small', {}, `${r.castleName} Lv.${state.castleLevel}`))),
       h('div', { class: 'stat', title: '金幣' }, coin(), String(state.gold)),
@@ -290,20 +311,38 @@ export class Ui {
         h('div', { class: `bar ${hpRatio < 0.35 ? 'low' : ''}` }, h('div', { style: `width:${hpRatio * 100}%` })),
       ),
       h('div', { class: 'wave-label' }, waveText, wave.title ? h('small', {}, wave.title) : null),
-      h(
-        'button',
-        {
-          class: 'icon-btn',
-          title: '音效開關',
-          onclick: (e: Event) => {
-            this.muted = this.actions.toggleMute();
-            (e.currentTarget as HTMLElement).textContent = this.muted ? '🔇 靜音' : '🔊 音效';
-          },
-        },
-        this.muted ? '🔇 靜音' : '🔊 音效',
-      ),
-      h('button', { class: 'icon-btn', onclick: () => this.showHelp() }, '❔ 說明'),
+      ...this.audioButtons(),
+      h('button', { class: 'icon-btn', onclick: () => this.showHelp(!!state.level) }, '❔ 說明'),
+      ...(state.level && state.phase === 'prep' ? [h('button', { class: 'icon-btn', onclick: () => this.confirmRetreat() }, '🏳 撤退')] : []),
     );
+  }
+
+  /** Separate music and sound-effect toggles. */
+  audioButtons(): HTMLElement[] {
+    const music = h('button', { class: 'icon-btn', title: '背景音樂開關' }, this.audio.music ? '🎵 音樂' : '🔇 音樂');
+    const sfx = h('button', { class: 'icon-btn', title: '音效開關' }, this.audio.sfx ? '🔊 音效' : '🔇 音效');
+    music.addEventListener('click', () => {
+      this.audio.music = this.actions.toggleMusic();
+      music.textContent = this.audio.music ? '🎵 音樂' : '🔇 音樂';
+    });
+    sfx.addEventListener('click', () => {
+      this.audio.sfx = this.actions.toggleSfx();
+      sfx.textContent = this.audio.sfx ? '🔊 音效' : '🔇 音效';
+    });
+    return [music, sfx];
+  }
+
+  private confirmRetreat(): void {
+    const modal = h(
+      'div',
+      { class: 'modal', style: 'max-width:440px;text-align:center' },
+      h('h1', {}, '撤退？'),
+      h('p', { class: 'subtitle' }, '放棄這場戰鬥並返回世界地圖。這塊領地之後仍可再次進攻。'),
+      h('button', { class: 'btn danger', onclick: () => this.actions.retreat() }, '撤退回地圖'),
+      h('button', { class: 'btn', onclick: () => this.closeOverlay() }, '繼續作戰'),
+    );
+    this.overlay.replaceChildren(modal);
+    this.overlay.classList.remove('hidden');
   }
 
   private renderBottom(state: GameState, battle: Battle | null): void {
@@ -338,7 +377,7 @@ export class Ui {
       this.updateBattle(battle);
     } else if (state.phase === 'prep') {
       this.battleStatus = null;
-      const w = getWave(state.wave);
+      const w = waveForState(state);
       this.bottom.replaceChildren(
         h(
           'div',
@@ -432,12 +471,14 @@ export class Ui {
   }
 
   private buildPanel(state: GameState, sel: Selection): Node[] {
-    const list = raceBuildings(state.race);
+    const list = availableBuildings(state).filter((b) => !b.campaignOnly);
+    const specials = availableBuildings(state).filter((b) => b.campaignOnly);
     const groups: [string, BuildingDef[]][] = [
       ['資源建築', list.filter((b) => b.kind === 'resource')],
       ['防禦塔', list.filter((b) => b.kind === 'tower')],
       ['兵營', list.filter((b) => b.kind === 'barracks')],
     ];
+    if (specials.length) groups.push(['特殊建築（每場限 1 座）', specials]);
     return [
       h('h2', {}, '空地'),
       h('p', { class: 'muted' }, `位置 (${sel.i}, ${sel.j})${sel.i === Math.max(...state.tiles.filter((t) => t.owned).map((t) => t.i)) ? '・最前線，最先遭受攻擊' : ''}`),
@@ -450,7 +491,9 @@ export class Ui {
     const locked = !check.ok && state.castleLevel < def.castleLevel;
     const poor = !check.ok && !locked;
     let sub = '';
-    if (locked) sub = `需要主堡等級 ${def.castleLevel}`;
+    const already = def.campaignOnly && state.tiles.some((t) => t.building?.defId === def.id);
+    if (already) sub = '本場已建造';
+    else if (locked) sub = `需要主堡等級 ${def.castleLevel}`;
     else if (def.kind === 'barracks') {
       const u = getUnit(def.unit!);
       sub = `產出 ${u.name}（${u.role}）`;
@@ -480,6 +523,8 @@ export class Ui {
       html += `<br><span class="muted">傷害 ${t.damage.join(' / ')}・射程 ${t.range}・每 ${t.attackInterval} 秒${t.canHitAir ? '・可對空' : '・無法對空'}${t.splash ? '・範圍傷害' : ''}</span>`;
     }
     if (def.kind === 'resource') html += `<br><span class="muted">產量 ${def.income!.join(' / ')}（Lv1/2/3）</span>`;
+    if (def.special?.type === 'healAura') html += `<br><span class="muted">每秒回復 ${def.special.pctPerSec.map((v) => pct(v)).join(' / ')} 生命・範圍 ${def.special.radius}</span>`;
+    if (def.special?.type === 'warBanner') html += `<br><span class="muted">全軍傷害 +${def.special.dmg.map((v) => pct(v)).join(' / ')}</span>`;
     return html;
   }
 
@@ -621,7 +666,7 @@ export class Ui {
 
   private renderRight(state: GameState, battle: Battle | null): void {
     const r = RACE_MAP.get(state.race)!;
-    const wave = getWave(state.wave);
+    const wave = waveForState(state);
     const counts = [...wave.groups];
     const enemyRows = [
       ...(wave.boss ? [{ unit: wave.boss, count: 1 }] : []),
@@ -631,7 +676,7 @@ export class Ui {
       const row = h(
         'div',
         { class: `enemy-row ${u.boss ? 'boss' : ''}` },
-        h('span', { class: 'enemy-dot', style: `background:${ENEMY_COLORS[u.id] ?? '#aaa'}` }),
+        h('span', { class: 'enemy-dot', style: `background:${ENEMY_COLORS[u.id] ?? FACTION_DOT[u.id.slice(0, 2)] ?? '#aaa'}` }),
         h('span', {}, u.name, ' ', ...unitTags(u).map((t) => h('span', { class: 'tag' }, t))),
         h('span', { class: 'count' }, `×${g.count}`),
       );
@@ -647,7 +692,8 @@ export class Ui {
     });
 
     const nodes: Node[] = [
-      h('h3', { style: 'margin-top:0' }, battle ? `本波敵軍・第 ${state.wave} 波` : `下一波・第 ${state.wave} 波`),
+      state.level ? this.levelInfo(state) : null,
+      h('h3', { style: state.level ? '' : 'margin-top:0' }, battle ? `本波敵軍・第 ${state.wave} 波` : `下一波・第 ${state.wave} 波`),
       wave.title ? h('p', { style: 'color:#fde68a;font-weight:700;margin-top:0' }, wave.title) : null,
       ...enemyRows,
     ].filter(Boolean) as Node[];
@@ -664,6 +710,12 @@ export class Ui {
       h('h3', {}, '協同組合'),
       ...synergyCards,
     );
+    if (state.level && state.perks.length) {
+      nodes.push(
+        h('h3', {}, '收復領地的加成'),
+        ...campaignPerkDefs(state.perks).map((p) => h('div', { class: 'synergy active' }, h('b', {}, p.name), h('br'), p.desc)),
+      );
+    }
     if (state.boons.length) {
       nodes.push(
         h('h3', {}, '已獲得的祝福'),
@@ -689,6 +741,19 @@ export class Ui {
       );
     }
     this.right.replaceChildren(...nodes);
+  }
+
+  private levelInfo(state: GameState): HTMLElement {
+    const terrain = TERRAINS[state.level!.terrain];
+    return h(
+      'div',
+      { class: 'synergy', style: 'margin-top:0' },
+      h('b', {}, `⚑ ${state.level!.name}`),
+      h('br'),
+      h('span', { class: 'muted' }, `地形：${terrain.name}`),
+      h('br'),
+      terrain.effect,
+    );
   }
 
   // ---------------------------------------------------------------- modals
@@ -720,6 +785,20 @@ export class Ui {
 
   showGameOver(state: GameState): void {
     const r = RACE_MAP.get(state.race)!;
+    if (state.level) {
+      const modal = h(
+        'div',
+        { class: 'modal', style: 'max-width:520px;text-align:center' },
+        h('h1', { style: 'color:#f87171' }, '收復失敗'),
+        h('p', { class: 'subtitle' }, `${state.level.name}的守軍擊退了我們（第 ${state.wave} / ${state.level.totalWaves} 波）。重整旗鼓，再戰一次！`),
+        this.summary(state),
+        h('button', { class: 'btn primary', onclick: () => this.actions.retry() }, '重新挑戰'),
+        h('button', { class: 'btn', onclick: () => this.actions.backToMap() }, '返回世界地圖'),
+      );
+      this.overlay.replaceChildren(modal);
+      this.overlay.classList.remove('hidden');
+      return;
+    }
     const modal = h(
       'div',
       { class: 'modal', style: 'max-width:520px;text-align:center' },
@@ -758,11 +837,11 @@ export class Ui {
       h('div', {}, h('span', {}, '我方陣亡'), h('b', {}, state.stats.deaths)),
       h('div', {}, h('span', {}, '總收入'), h('b', {}, state.stats.goldEarned)),
       h('div', {}, h('span', {}, '主堡等級'), h('b', {}, state.castleLevel)),
-      h('div', {}, h('span', {}, '祝福'), h('b', {}, state.boons.map((b) => BOON_MAP.get(b)!.name).join('、') || '—')),
+      state.level ? null : h('div', {}, h('span', {}, '祝福'), h('b', {}, state.boons.map((b) => BOON_MAP.get(b)!.name).join('、') || '—')),
     );
   }
 
-  showHelp(): void {
+  showHelp(campaign = false): void {
     const modal = h(
       'div',
       { class: 'modal', style: 'max-width:640px' },
@@ -777,8 +856,12 @@ export class Ui {
         h('p', {}, '🗼 防禦塔自動攻擊射程內的敵人。注意有些兵種與塔無法攻擊飛行單位！'),
         h('p', {}, '🧩 相鄰加成：兵營相鄰兵營出兵更快，資源相鄰資源產量更高，塔相鄰塔傷害更高。'),
         h('p', {}, '↘ 敵人永遠從右下方來襲，最靠近前線的建築會先被攻擊。被摧毀的建築戰後自動修復，主堡的損傷會保留，需要花金幣修復。'),
-        h('p', {}, '⭐ 主堡等級決定能蓋什麼、能升到幾級、能擴張多少土地。每 5 波可以選一項祝福。'),
-        h('p', {}, '🏆 撐過 30 波（第 10、20、30 波有首領）即可獲勝，之後可挑戰無盡模式。'),
+        campaign
+          ? h('p', {}, '⭐ 主堡等級決定能蓋什麼、能升到幾級、能擴張多少土地。每塊領地都從新的九宮格與 Lv.1 主堡開始。')
+          : h('p', {}, '⭐ 主堡等級決定能蓋什麼、能升到幾級、能擴張多少土地。每 5 波可以選一項祝福。'),
+        campaign
+          ? h('p', {}, '🗺 擊退全部敵軍（最後一波是首領）就能收復領地。收復的領地會給予永久加成或特殊建築，地形則會影響這場戰鬥。')
+          : h('p', {}, '🏆 撐過 30 波（第 10、20、30 波有首領）即可獲勝，之後可挑戰無盡模式。'),
         h('p', { class: 'muted' }, '快捷鍵：空白鍵開始下一波・1/2/3 切換速度・Q/W/E 切換作戰姿態・Esc 取消選取'),
       ),
       h('button', { class: 'btn primary', onclick: () => this.closeOverlay() }, '知道了'),

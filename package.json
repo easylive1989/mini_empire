@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "balance": "vite-node tools/balance.ts",
+    "campaign-sim": "vite-node tools/campaign-sim.ts",
     "assets": "node tools/build-assets.mjs"
   },
   "repository": {

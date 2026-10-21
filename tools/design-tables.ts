@@ -2,6 +2,7 @@
 // Usage: npx vite-node tools/design-tables.ts > /tmp/tables.md
 import { BOONS } from '../src/game/data/boons';
 import { getUnit, RACES, raceBuildings, raceUnits, UNITS } from '../src/game/data/index';
+import { SPECIAL_BUILDINGS, SPECIAL_UNITS } from '../src/game/data/specials';
 import type { UnitDef } from '../src/game/types';
 
 const pct = (x?: number) => (x ? `${Math.round(x * 100)}%` : '—');
@@ -31,8 +32,24 @@ for (const r of RACES) {
   console.log('');
 }
 
-console.log('### 亡靈軍團\n\n| 怪物 | 定位 | 生命 | 攻擊 / 間隔 | 射程 | 護甲 | 特性 | 說明 |\n| --- | --- | --- | --- | --- | --- | --- | --- |');
-for (const u of UNITS.values()) if (u.race === 'monster') console.log(unitRow(u));
+const HEADER = '| 怪物 | 定位 | 生命 | 攻擊 / 間隔 | 射程 | 護甲 | 特性 | 說明 |\n| --- | --- | --- | --- | --- | --- | --- | --- |';
+const ARMIES: [string, string][] = [
+  ['亡靈軍團', 'm_'],
+  ['哥布林', 'g_'],
+  ['獸人', 'o_'],
+  ['叛軍', 'r_'],
+  ['魔王', 'b_'],
+];
+for (const [title, prefix] of ARMIES) {
+  console.log(`### ${title}\n\n${HEADER}`);
+  for (const u of UNITS.values()) if (u.race === 'monster' && u.id.startsWith(prefix)) console.log(unitRow(u));
+  console.log('');
+}
+
+console.log(`### 特殊建築（戰役解鎖）\n\n| 建築 | 類型 | 主堡等級 | 費用 | 說明 |\n| --- | --- | --- | --- | --- |`);
+for (const b of SPECIAL_BUILDINGS) console.log(`| ${b.name} | ${KIND[b.kind]} | ${b.castleLevel} | ${b.cost} | ${b.desc} |`);
+console.log(`\n| 傭兵 | 定位 | 生命 | 攻擊 / 間隔 | 射程 | 護甲 | 特性 | 說明 |\n| --- | --- | --- | --- | --- | --- | --- | --- |`);
+for (const u of SPECIAL_UNITS) console.log(unitRow(u));
 
 console.log('\n### 祝福\n\n| 祝福 | 限定 | 效果 |\n| --- | --- | --- |');
 for (const b of BOONS) console.log(`| ${b.name} | ${b.race ? RACES.find((r) => r.id === b.race)!.name : '通用'} | ${b.desc} |`);

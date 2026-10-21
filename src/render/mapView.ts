@@ -17,18 +17,18 @@ const SIZE = 2.4;
 const HEX_R = SIZE * 1.1547;
 
 const TINT: Record<TerrainId, string> = {
-  plains: '#ffffff',
-  town: '#eef0dc',
-  forest: '#bfdca8',
-  hills: '#e6f0c4',
-  swamp: '#a3b58c',
-  mountain: '#d2d4cc',
-  badlands: '#eaa36e',
-  mine: '#cbc3a6',
-  graveyard: '#9ea898',
-  holy: '#f6ffe8',
-  river: '#ffffff',
-  capital: '#a68a86',
+  plains: '#b5e3a0',
+  town: '#c8e0b0',
+  forest: '#9fd08a',
+  hills: '#c4e3a0',
+  swamp: '#8fa880',
+  mountain: '#c9cec4',
+  badlands: '#e0a070',
+  mine: '#c0b8a0',
+  graveyard: '#9aa498',
+  holy: '#d8f5c8',
+  river: '#b5e3a0',
+  capital: '#a08680',
 };
 const ELEVATION: Partial<Record<TerrainId, number>> = { hills: 0.25, mountain: 0.45, mine: 0.2, capital: 0.15 };
 const OCCUPIED_SHADE = new THREE.Color('#4a3550');
@@ -327,7 +327,7 @@ export class MapView {
 
   private applyLook(n: Node): void {
     const k = n.light;
-    for (const m of n.tileMats) m.color.copy(OCCUPIED_SHADE).lerp(m.userData.base as THREE.Color, 0.45 + 0.55 * k);
+    for (const m of n.tileMats) m.color.copy(OCCUPIED_SHADE).lerp(m.userData.base as THREE.Color, 0.38 + 0.62 * k);
     for (const o of n.freeObjs) o.visible = k >= 0.5;
     for (const o of n.darkObjs) o.visible = k < 0.5;
   }
@@ -507,11 +507,11 @@ export class MapView {
     const lerp = (a: string, b: string) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), p).getHexString();
     if (this.scene.background instanceof THREE.Texture) this.scene.background.dispose();
     this.scene.background = skyTexture(lerp('#140b1c', '#4d86b8'), lerp('#55233a', '#cfe3ea'), lerp('#7a2c2c', '#f2d9a8'));
-    this.lights.hemi.color.set(lerp('#b9a3c9', '#f4fbff'));
-    this.lights.hemi.groundColor.set(lerp('#3a2a3a', '#6d8a4e'));
-    this.lights.hemi.intensity = 0.85 + 0.75 * p;
-    this.lights.sun.color.set(lerp('#ff9f7a', '#fff1d6'));
-    this.lights.sun.intensity = 1.5 + 1.1 * p;
+    this.lights.hemi.color.set(lerp('#a89cc8', '#f4fbff'));
+    this.lights.hemi.groundColor.set(lerp('#2e2438', '#6d8a4e'));
+    this.lights.hemi.intensity = 1.0 + 0.6 * p;
+    this.lights.sun.color.set(lerp('#e8b8c8', '#fff1d6'));
+    this.lights.sun.intensity = 1.4 + 1.2 * p;
     for (const m of this.water) m.color.set(lerp('#5a4a78', '#ffffff'));
   }
 }
