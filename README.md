@@ -83,4 +83,4 @@ node tools/build-assets.mjs /tmp/kaykit    # 篩選、合併、壓縮成遊戲�
 
 ## 部署到 GitHub Pages
 
-`.github/workflows/deploy.yml` 會在推送到 `main` 時自動測試、打包並部署。第一次使用前，請到 repo 的 **Settings → Pages**，把 **Source** 設為 **GitHub Actions**。
+`.github/workflows/deploy.yml` 會在推送到 `master` 時自動測試、打包並部署。第一次使用前，請到 repo 的 **Settings → Pages**，把 **Source** 設為 **GitHub Actions**。
