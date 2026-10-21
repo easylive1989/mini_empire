@@ -89,7 +89,7 @@ export const FACTION_UNITS: UnitDef[] = [
     canHitAir: true,
     projectile: 'nature',
     bounty: 6,
-    traits: [{ type: 'heal', amount: 26, interval: 1.8, range: 6.5 }],
+    traits: [{ type: 'heal', amount: 18, interval: 2.0, range: 6.5 }],
     model: { base: 'Mage', scale: 0.82, extras: ['goblinEars'], keep: ['2H_Staff'], palette: 'goblinShaman', anims: { attack: 'Spellcast_Shoot' } },
   },
   {
@@ -197,7 +197,7 @@ export const FACTION_UNITS: UnitDef[] = [
     canHitAir: true,
     projectile: 'fire',
     bounty: 8,
-    traits: [{ type: 'aura', radius: 7, dmgMult: 1.25, atkSpeedMult: 1.15 }],
+    traits: [{ type: 'aura', radius: 7, dmgMult: 1.25, atkSpeedMult: 1.15, unique: true }],
     model: { base: 'Mage', keep: ['2H_Staff'], extras: ['tusks'], palette: 'orcShaman', anims: { attack: 'Spellcast_Shoot' } },
   },
   {
@@ -232,8 +232,8 @@ export const FACTION_UNITS: UnitDef[] = [
     bounty: 120,
     traits: [
       { type: 'cleave', radius: 2.4, ratio: 0.7 },
-      { type: 'aura', radius: 8, dmgMult: 1.3, atkSpeedMult: 1.2 },
-      { type: 'enrage', threshold: 0.5, dmgMult: 1.4, atkSpeedMult: 1.3, speedMult: 1.2, summon: { unitId: 'o_berserker', count: 4 } },
+      { type: 'aura', radius: 8, dmgMult: 1.2, atkSpeedMult: 1.1 },
+      { type: 'enrage', threshold: 0.5, dmgMult: 1.35, atkSpeedMult: 1.25, speedMult: 1.2, summon: { unitId: 'o_berserker', count: 3 } },
     ],
     model: { base: 'Barbarian', scale: 2.3, keep: ['2H_Axe'], hide: ['Barbarian_Hat'], extras: ['tusks', 'bigHorns'], palette: 'orcBoss', anims: { attack: '2H_Melee_Attack_Chop' } },
   },
@@ -348,7 +348,7 @@ export const FACTION_UNITS: UnitDef[] = [
     name: '魔王 莫爾加斯',
     race: 'monster',
     role: '最終首領',
-    desc: '殺死老國王的元兇。巨大的魔焰之軀，橫掃一切；生命低於一半時現出真身，力量暴增並召喚墮落騎士。',
+    desc: '殺死老國王的元兇。巨大的魔焰之軀，橫掃一切；不斷喚出骷髏戰士；生命低於一半時現出真身，力量暴增並召喚墮落騎士。',
     hp: 30000,
     damage: 130,
     attackInterval: 1.6,
@@ -362,8 +362,8 @@ export const FACTION_UNITS: UnitDef[] = [
     traits: [
       { type: 'cleave', radius: 3, ratio: 0.8 },
       { type: 'aura', radius: 9, dmgMult: 1.3 },
-      { type: 'summon', unitId: 'm_darkknight', interval: 14, count: 2 },
-      { type: 'enrage', threshold: 0.5, dmgMult: 1.5, atkSpeedMult: 1.3, speedMult: 1.3, summon: { unitId: 'm_darkknight', count: 4 } },
+      { type: 'summon', unitId: 'm_warrior', interval: 15, count: 2 },
+      { type: 'enrage', threshold: 0.5, dmgMult: 1.4, atkSpeedMult: 1.25, speedMult: 1.3, summon: { unitId: 'm_darkknight', count: 3 } },
     ],
     model: { base: 'Barbarian', scale: 2.9, keep: ['2H_Axe'], hide: ['Barbarian_Hat'], extras: ['bigHorns', 'batWings'], palette: 'demonlord', anims: { attack: '2H_Melee_Attack_Chop', move: 'Walking_A' } },
   },

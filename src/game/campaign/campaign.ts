@@ -3,7 +3,7 @@ import { castleMaxHp, CAMPAIGN_ECONOMY, newGame, type GameState } from '../state
 import type { RaceId } from '../types';
 import { territoryWaveCount } from './campaignWaves';
 import { PERK_MAP } from './perks';
-import { CAPITAL_TERRITORY, getTerritory, neighbours, START_TERRITORY, TERRITORIES } from './territories';
+import { CAPITAL_TERRITORY, getTerritory, neighbours, START_TERRITORY, TERRITORIES, territoryTier } from './territories';
 
 export interface CampaignState {
   version: 1;
@@ -113,8 +113,10 @@ export function campaignUnlocks(c: CampaignState): string[] {
   return c.conquered.map((id) => getTerritory(id).reward.unlock).filter((u): u is string => !!u);
 }
 
-export function startingGold(c: CampaignState): number {
-  return CAMPAIGN_ECONOMY.startGold + campaignPerks(c).reduce((s, p) => s + (PERK_MAP.get(p)?.startGold ?? 0), 0);
+/** War chest for a territory battle: grows with distance from the refuge, plus perks. */
+export function startingGold(c: CampaignState, territoryId: string): number {
+  const tier = territoryTier(getTerritory(territoryId));
+  return CAMPAIGN_ECONOMY.startGold[tier] + campaignPerks(c).reduce((s, p) => s + (PERK_MAP.get(p)?.startGold ?? 0), 0);
 }
 
 export function startingCastle(c: CampaignState): number {
@@ -128,7 +130,7 @@ export function createLevelState(c: CampaignState, territoryId: string, seed = D
   s.level = { territoryId, name: t.name, terrain: t.terrain, totalWaves: territoryWaveCount(territoryId) };
   s.perks = campaignPerks(c);
   s.unlocks = campaignUnlocks(c);
-  s.gold = startingGold(c);
+  s.gold = startingGold(c, territoryId);
   s.castleLevel = startingCastle(c);
   s.castleHp = castleMaxHp(s);
   return s;

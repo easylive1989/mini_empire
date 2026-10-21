@@ -10,13 +10,14 @@ type Mix = [unit: string, weight: number, minTier?: number];
 export const CAMPAIGN = {
   normalWaves: 6,
   capitalWaves: 10,
-  /** Classic-wave equivalent of a territory's first wave, by tier (index = tier). */
-  tierStart: [0, 1.5, 3.5, 6, 8.5, 9],
-  /** Classic-wave equivalent added per wave inside a territory. */
-  waveStep: 1.9,
-  capitalStep: 1.9,
+  /** Classic-wave equivalent of a territory's first wave, by tier (index = tier, 5 = capital). */
+  tierStart: [0, 1, 4, 6.5, 9, 9.5],
+  /** Classic-wave equivalent added per wave inside a territory, by tier. */
+  tierStep: [0, 1.4, 1.6, 1.7, 1.8, 1.75],
+  /** Army strength multiplier by tier (the war chest only covers part of the climb). */
+  tierBudget: [0, 0.95, 0.7, 0.66, 0.66, 0.75],
   /** Boss HP relative to its classic stats, by tier. */
-  bossHp: [0, 0.4, 0.6, 0.85, 1.05, 1],
+  bossHp: [0, 0.4, 0.55, 0.75, 0.9, 0.7],
 };
 
 const FACTION_WAVES: Record<Exclude<FactionId, 'demonlord'>, Mix[][]> = {
@@ -31,10 +32,10 @@ const FACTION_WAVES: Record<Exclude<FactionId, 'demonlord'>, Mix[][]> = {
   goblin: [
     [['g_goblin', 0.7], ['g_thief', 0.3]],
     [['g_goblin', 0.5], ['g_bomber', 0.3], ['g_thief', 0.2]],
-    [['g_goblin', 0.4], ['g_shaman', 0.2], ['g_bomber', 0.4]],
+    [['g_goblin', 0.45], ['g_shaman', 0.15], ['g_bomber', 0.4]],
     [['g_troll', 0.4, 2], ['g_goblin', 0.4], ['g_thief', 0.2]],
-    [['g_troll', 0.3, 2], ['g_bomber', 0.3], ['g_shaman', 0.2], ['g_goblin', 0.2]],
-    [['g_goblin', 0.5], ['g_troll', 0.3, 3], ['g_shaman', 0.2]],
+    [['g_troll', 0.35, 2], ['g_bomber', 0.3], ['g_shaman', 0.1], ['g_goblin', 0.25]],
+    [['g_goblin', 0.55], ['g_troll', 0.3, 3], ['g_shaman', 0.15]],
   ],
   orc: [
     [['o_grunt', 1]],
@@ -61,14 +62,14 @@ const CAPITAL_WAVES: Mix[][] = [
   [['m_warrior', 0.4], ['m_ghost', 0.3], ['m_necromancer', 0.3]],
   [['r_knight', 0.4], ['r_mage', 0.3], ['r_assassin', 0.3]],
   [['o_brute', 0.4], ['o_berserker', 0.3], ['o_spearman', 0.3]],
-  [['g_troll', 0.4], ['g_shaman', 0.3], ['g_thief', 0.3]],
+  [['g_troll', 0.4], ['g_shaman', 0.2], ['g_thief', 0.4]],
   [['m_darkknight', 0.4], ['m_necromancer', 0.3], ['m_mage', 0.3]],
   [['r_knight', 0.25], ['o_brute', 0.25], ['g_troll', 0.25], ['m_darkknight', 0.25]],
   [['o_berserker', 0.3], ['r_assassin', 0.3], ['m_ghost', 0.4]],
 ];
 
 const FACTION_BOSS: Record<Exclude<FactionId, 'demonlord'>, (tier: number) => string> = {
-  undead: (tier) => (tier >= 4 ? 'm_deathknight' : tier === 3 ? 'm_lich' : 'm_skeleton_king'),
+  undead: (tier) => (tier >= 4 ? 'm_lich' : 'm_skeleton_king'),
   goblin: () => 'g_king',
   orc: () => 'o_warlord',
   rebel: () => 'r_usurper',
@@ -90,8 +91,7 @@ export function territoryWaveCount(territoryId: string): number {
 export function effectiveWave(territoryId: string, wave: number): number {
   const t = getTerritory(territoryId);
   const tier = territoryTier(t);
-  const step = t.capital ? CAMPAIGN.capitalStep : CAMPAIGN.waveStep;
-  return CAMPAIGN.tierStart[tier] + (wave - 1) * step;
+  return CAMPAIGN.tierStart[tier] + (wave - 1) * CAMPAIGN.tierStep[tier];
 }
 
 export function getCampaignWave(territoryId: string, wave: number): WaveDef {
@@ -106,7 +106,7 @@ export function getCampaignWave(territoryId: string, wave: number): WaveDef {
 
   const e = effectiveWave(territoryId, wave);
   const sc = baseScaling(e);
-  const budget = waveBudget(e) * (boss ? 0.6 : 1);
+  const budget = waveBudget(e) * CAMPAIGN.tierBudget[tier] * (boss ? 0.6 : 1);
   const weight = mix.reduce((s, [, w]) => s + w, 0);
   const raw = mix.map(([unit, w]) => ({ unit, count: (budget * (w / weight)) / unitThreat(getUnit(unit), sc.hp, sc.dmg) }));
   const totalCount = raw.reduce((s, g) => s + g.count, 0);

@@ -73,8 +73,11 @@ export interface LevelInfo {
   totalWaves: number;
 }
 
-/** Campaign battles run a quicker economy so a 6-wave fight still reaches the late game. */
-export const CAMPAIGN_ECONOMY = { startGold: 320, castleIncome: 1.7, income: 1.35 };
+/**
+ * Campaign battles run a quicker economy so a 6-wave fight still reaches the late game. The war chest
+ * grows with the territory's distance from the refuge (index = tier, 5 = capital).
+ */
+export const CAMPAIGN_ECONOMY = { startGold: [0, 360, 650, 1000, 1400, 1900], castleIncome: 1.7, income: 1.35 };
 
 export interface GameState {
   race: RaceId;

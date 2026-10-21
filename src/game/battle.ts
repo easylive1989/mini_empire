@@ -905,13 +905,20 @@ export class Battle {
       e.armorAdd = armor;
       e.evasionAdd = eva;
     }
-    // Unit auras.
+    // Unit auras. A unique aura affects each unit once, however many of its source stand nearby.
+    const uniqueAuras = new Map<Entity, Set<string>>();
     for (const src of this.entities) {
       if (!src.alive) continue;
       for (const tr of src.def.traits ?? []) {
         if (tr.type !== 'aura') continue;
         for (const o of this.alliesInRadius(src.team, src.x, src.z, tr.radius)) {
           if (o === src && tr.atkSpeedMult) continue;
+          if (tr.unique) {
+            const got = uniqueAuras.get(o) ?? new Set<string>();
+            if (got.has(src.def.id)) continue;
+            got.add(src.def.id);
+            uniqueAuras.set(o, got);
+          }
           if (tr.dmgMult) o.dmgMult *= tr.dmgMult;
           if (tr.atkSpeedMult) o.atkSpeedMult *= tr.atkSpeedMult;
           if (tr.evasionAdd) o.evasionAdd += tr.evasionAdd;

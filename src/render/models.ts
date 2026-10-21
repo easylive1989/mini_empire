@@ -3,7 +3,7 @@ import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { TILE } from '../game/constants';
 import type { BuildingModel, Extra, RaceId, UnitDef } from '../game/types';
 import { packItem, type Assets } from './assets';
-import { buildingMaterial, characterMaterial } from './recolor';
+import { buildingMaterial, characterMaterial, paletteSkin } from './recolor';
 
 /** KayKit characters are ~2.2 units tall; units are drawn this tall in world space. */
 const UNIT_HEIGHT = 2.0;
@@ -76,7 +76,7 @@ function addExtras(root: THREE.Object3D, extras: Extra[], palette: string | unde
   const chest = findNode(root, 'chest');
   const handR = findNode(root, 'handslotr', 'handslot.r');
   const handL = findNode(root, 'handslotl', 'handslot.l');
-  const skin = palette === 'demon' || palette === 'imp' || palette === 'cultist' || palette === 'warlock' ? '#b91c1c' : '#f6d2b8';
+  const skin = paletteSkin(palette, '#f6d2b8');
   for (const ex of extras) {
     switch (ex) {
       case 'wings':
@@ -119,6 +119,28 @@ function addExtras(root: THREE.Object3D, extras: Extra[], palette: string | unde
           e.position.set(side * 0.55, 0.5, -0.02);
           e.rotation.z = -side * 1.15;
           head?.add(e);
+        }
+        break;
+      }
+      case 'goblinEars': {
+        const geo = new THREE.ConeGeometry(0.11, 0.7, 5);
+        for (const side of [-1, 1]) {
+          const e = mesh(geo, mat(skin));
+          e.position.set(side * 0.62, 0.55, -0.05);
+          e.rotation.z = -side * 1.35;
+          e.rotation.y = side * 0.25;
+          head?.add(e);
+        }
+        break;
+      }
+      case 'tusks': {
+        const geo = new THREE.ConeGeometry(0.06, 0.26, 6);
+        for (const side of [-1, 1]) {
+          const t = mesh(geo, mat('#f5f0e1'));
+          t.position.set(side * 0.18, 0.18, 0.5);
+          t.rotation.x = -0.25;
+          t.rotation.z = side * 0.2;
+          head?.add(t);
         }
         break;
       }

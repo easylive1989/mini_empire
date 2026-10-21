@@ -104,7 +104,13 @@ export function botPrepare(state: GameState, planIndex: { n: number }): void {
   if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
 
   for (let guard = 0; guard < 60; guard++) {
-    const targetCastle = CASTLE_SCHEDULE.filter((w) => state.wave >= w).length;
+    const combat = state.tiles.filter((t) => t.building && getBuilding(t.building.defId).kind !== 'resource').length;
+    // Campaign battles are short: build an army first, tech up once it is in place.
+    const targetCastle = state.level
+      ? combat >= state.castleLevel * 2
+        ? state.castleLevel + 1
+        : state.castleLevel
+      : CASTLE_SCHEDULE.filter((w) => state.wave >= w).length;
     if (state.castleLevel < targetCastle) {
       if (canUpgradeCastle(state).ok) {
         upgradeCastle(state);
@@ -113,10 +119,31 @@ export function botPrepare(state: GameState, planIndex: { n: number }): void {
       // Save up, but never sit on gold while the plot is still empty early on.
       if (state.gold < (castleUpgradeCost(state) ?? 0)) break;
     }
+    // Campaign: once a core army stands, alternate between upgrades and new buildings.
+    if (state.level && combat >= 2 + state.castleLevel) {
+      const up = state.tiles
+        .filter((t) => t.building && getBuilding(t.building.defId).kind !== 'resource' && canUpgrade(state, t.i, t.j).ok)
+        .sort((a, b) => a.building!.level - b.building!.level);
+      if (up.length && (guard % 2 === 0 || !state.tiles.some((t) => t.owned && !t.building && !isCastleTile(t.i, t.j)))) {
+        upgrade(state, up[0].i, up[0].j);
+        continue;
+      }
+    }
+    // Campaign specials are slotted in once the core of the plan is built.
+    const specials = (state.unlocks ?? []).filter((id) => !state.tiles.some((t) => t.building?.defId === id));
+    const builtSpecials = state.tiles.filter((t) => t.building && getBuilding(t.building.defId).campaignOnly).length;
+    const special = planIndex.n >= plan.length && builtSpecials < 2 ? specials.find((id) => getBuilding(id).castleLevel <= state.castleLevel) : undefined;
+    if (special) {
+      const spot = bestTile(state, special);
+      if (spot && canBuild(state, spot.i, spot.j, special).ok) {
+        build(state, spot.i, spot.j, special);
+        continue;
+      }
+    }
     const nextId = plan[planIndex.n % plan.length];
     const def = getBuilding(nextId);
     const resources = state.tiles.filter((t) => t.building && getBuilding(t.building.defId).kind === 'resource').length;
-    if (def.kind === 'resource' && (planIndex.n >= plan.length || resources >= 4)) {
+    if (def.kind === 'resource' && (planIndex.n >= plan.length || resources >= (state.level ? 2 : 4))) {
       planIndex.n++;
       continue;
     }

@@ -96,10 +96,11 @@ describe('campaign progression', () => {
 
   it('turns liberated territories into perks, gold and special buildings', () => {
     const c = newCampaign('human');
-    const baseGold = startingGold(c);
-    recordBattle(c, 't_wheat', true, 0); // +60 gold
+    const baseGold = startingGold(c, 't_greystone');
+    recordBattle(c, 't_wheat', true, 0); // +80 gold
     recordBattle(c, 't_caravan', true, 0); // mercenary camp
-    expect(startingGold(c)).toBe(baseGold + 60);
+    expect(startingGold(c, 't_greystone')).toBe(baseGold + 80);
+    expect(startingGold(c, CAPITAL_TERRITORY.id)).toBeGreaterThan(startingGold(c, 't_greystone') + 1000);
     expect(campaignUnlocks(c)).toEqual(['sp_mercenary']);
     expect(campaignPerks(c)).toContain('p_gold');
     recordBattle(c, 't_ravenhold', true, 0);
@@ -217,8 +218,8 @@ describe('faction mechanics', () => {
     const before = b.entities.length;
     b.damageEntity(boss, boss.maxHp * 0.6, 'magic', {});
     expect(boss.enraged).toBe(true);
-    expect(b.entities.filter((e) => e.def.id === 'o_berserker').length).toBe(4);
-    expect(b.entities.length).toBe(before + 4);
+    expect(b.entities.filter((e) => e.def.id === 'o_berserker').length).toBe(3);
+    expect(b.entities.length).toBe(before + 3);
   });
 
   it('terrain changes enemy stats (swamp slows everyone)', () => {

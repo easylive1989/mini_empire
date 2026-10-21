@@ -34,7 +34,7 @@ export type StatusId =
 export type Trait =
   | { type: 'heal'; amount: number; interval: number; range: number }
   | { type: 'blessOnHeal'; dmgMult: number; duration: number }
-  | { type: 'aura'; radius: number; dmgMult?: number; atkSpeedMult?: number; evasionAdd?: number; armorAdd?: number }
+  | { type: 'aura'; radius: number; dmgMult?: number; atkSpeedMult?: number; evasionAdd?: number; armorAdd?: number; unique?: boolean }
   | { type: 'towerAura'; radius: number; dmgMult?: number; atkSpeedMult?: number }
   | { type: 'phalanx'; radius: number; minAllies: number; armorAdd: number; dmgMult: number }
   | { type: 'focusFire'; radius: number; dmgMult: number }
