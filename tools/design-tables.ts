@@ -5,7 +5,7 @@ import { getUnit, RACES, raceBuildings, raceUnits, UNITS } from '../src/game/dat
 import type { UnitDef } from '../src/game/types';
 
 const pct = (x?: number) => (x ? `${Math.round(x * 100)}%` : '—');
-const KIND = { resource: '資源', tower: '防禦塔', barracks: '兵營' } as const;
+const KIND = { resource: '資源', tower: '防禦塔', support: '支援', barracks: '兵營' } as const;
 
 function unitRow(u: UnitDef): string {
   const dmg = `${u.damage}${u.damageType === 'magic' ? '（魔）' : ''}`;

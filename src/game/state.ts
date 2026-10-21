@@ -15,8 +15,10 @@ import {
   START_RADIUS,
   UPGRADE_COST_MULT,
 } from './constants';
+import { PERK_MAP } from './campaign/perks';
+import { TERRAINS, type TerrainId } from './campaign/terrain';
 import { BOONS, BOON_MAP } from './data/boons';
-import { getBuilding, RACE_MAP } from './data/index';
+import { BUILDINGS, getBuilding, RACE_MAP, raceBuildings, sortBuildings } from './data/index';
 import { Rng } from './rng';
 import type { BuildingDef, Modifiers, RaceId, Stance } from './types';
 
@@ -59,7 +61,20 @@ export interface BattleOutcome {
   kills: number;
   bounty: number;
   playerDeaths: number;
+  /** Gold pocketed by goblin thieves this wave. */
+  goldStolen?: number;
 }
+
+/** A campaign battle for one territory of the world map. */
+export interface LevelInfo {
+  territoryId: string;
+  name: string;
+  terrain: TerrainId;
+  totalWaves: number;
+}
+
+/** Campaign battles run a quicker economy so a 6-wave fight still reaches the late game. */
+export const CAMPAIGN_ECONOMY = { startGold: 320, castleIncome: 1.7, income: 1.35 };
 
 export interface GameState {
   race: RaceId;
@@ -72,6 +87,12 @@ export interface GameState {
   boons: string[];
   endless: boolean;
   stance: Stance;
+  /** Campaign battle info; null in the classic 30-wave mode. */
+  level: LevelInfo | null;
+  /** Permanent campaign perks from liberated territories. */
+  perks: string[];
+  /** Campaign special buildings this battle may use. */
+  unlocks: string[];
   phase: Phase;
   boonChoices: string[];
   report: WaveReport | null;
@@ -103,6 +124,9 @@ export function newGame(race: RaceId, seed = Date.now()): GameState {
     boons: [],
     endless: false,
     stance: 'advance',
+    level: null,
+    perks: [],
+    unlocks: [],
     phase: 'prep',
     boonChoices: [],
     report: null,
@@ -156,6 +180,13 @@ export function baseModifiers(): Modifiers {
     engineerMult: 1,
     healMult: 1,
     castleDmgMult: 1,
+    castleIncomeMult: 1,
+    rangeAddAll: 0,
+    towerRangeAdd: 0,
+    enemyHpMult: 1,
+    enemyDmgMult: 1,
+    enemySpeedMult: 1,
+    enemyEvasionAdd: 0,
   };
 }
 
@@ -179,6 +210,12 @@ export function getModifiers(state: GameState): Modifiers {
   m.soulDmg += r.soulDmg ?? 0;
   m.soulMax += r.soulMax ?? 0;
   for (const id of state.boons) BOON_MAP.get(id)?.apply(m);
+  for (const id of state.perks ?? []) PERK_MAP.get(id)?.apply(m);
+  if (state.level) {
+    m.castleIncomeMult *= CAMPAIGN_ECONOMY.castleIncome;
+    m.incomeMult *= CAMPAIGN_ECONOMY.income;
+    TERRAINS[state.level.terrain].apply(m);
+  }
   return m;
 }
 
@@ -208,6 +245,10 @@ export function canBuild(state: GameState, i: number, j: number, defId: string):
   if (!tile || !tile.owned) return { ok: false, reason: '這塊土地尚未擁有' };
   if (isCastleTile(i, j) || tile.building) return { ok: false, reason: '這裡已經有建築' };
   if (!availableToRace(state, def)) return { ok: false, reason: '其他種族的建築' };
+  if (def.campaignOnly) {
+    if (!(state.unlocks ?? []).includes(def.id)) return { ok: false, reason: '尚未解鎖的特殊建築' };
+    if (state.tiles.some((t) => t.building?.defId === def.id)) return { ok: false, reason: '每種特殊建築限蓋 1 座', cost };
+  }
   if (state.castleLevel < def.castleLevel) return { ok: false, reason: `需要主堡等級 ${def.castleLevel}`, cost };
   if (state.gold < cost) return { ok: false, reason: '金幣不足', cost };
   return { ok: true, cost };
@@ -429,7 +470,13 @@ export function buildingIncome(state: GameState, i: number, j: number): number {
 }
 
 export function castleIncome(state: GameState): number {
-  return CASTLE.baseIncome[state.castleLevel - 1];
+  return Math.round(CASTLE.baseIncome[state.castleLevel - 1] * getModifiers(state).castleIncomeMult);
+}
+
+/** Buildings the player may pick from: race roster plus unlocked campaign specials. */
+export function availableBuildings(state: GameState): BuildingDef[] {
+  const specials = [...BUILDINGS.values()].filter((b) => b.campaignOnly && (state.unlocks ?? []).includes(b.id));
+  return [...raceBuildings(state.race), ...sortBuildings(specials)];
 }
 
 /** Income lines the player can expect next wave (excluding bounty and death bonuses). */
@@ -506,6 +553,10 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
   if (mods.interest > 0) {
     report.income.push({ label: '國庫利息', amount: Math.min(120, Math.floor(state.gold * mods.interest)) });
   }
+  const gross = report.income.reduce((s, l) => s + l.amount, 0);
+  if (outcome.goldStolen) {
+    report.income.push({ label: '哥布林偷走的金幣', amount: -Math.min(outcome.goldStolen, state.gold + gross) });
+  }
   report.total = report.income.reduce((s, l) => s + l.amount, 0);
   state.gold += report.total;
   state.stats.goldEarned += report.total;
@@ -516,6 +567,11 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
   }
   state.report = report;
   state.wave += 1;
+  if (state.level) {
+    // Campaign battles: no boons; the territory is liberated after its last wave.
+    state.phase = wave >= state.level.totalWaves ? 'victory' : 'prep';
+    return report;
+  }
   if (isBoonWave(wave)) {
     state.boonChoices = rollBoons(state);
     state.phase = state.boonChoices.length ? 'boon' : 'prep';

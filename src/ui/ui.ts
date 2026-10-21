@@ -56,7 +56,7 @@ export const STANCE_INFO: Record<Stance, { icon: string; name: string; desc: str
   advance: { icon: '⚔', name: '迎擊', desc: '士兵集結成隊後推進到中場迎敵，兵力不利時退回前線。' },
   assault: { icon: '🔥', name: '突擊', desc: '全軍壓上直攻墓園、搶先打掉後排敵人；傷害 +10%、移速 +15%，但會脫離防禦塔掩護。' },
 };
-const KIND_LABEL = { resource: '資源', tower: '防禦塔', barracks: '兵營' } as const;
+const KIND_LABEL = { resource: '資源', tower: '防禦塔', support: '支援', barracks: '兵營' } as const;
 
 export interface Selection {
   i: number;
