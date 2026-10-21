@@ -34,7 +34,7 @@ export type StatusId =
 export type Trait =
   | { type: 'heal'; amount: number; interval: number; range: number }
   | { type: 'blessOnHeal'; dmgMult: number; duration: number }
-  | { type: 'aura'; radius: number; dmgMult?: number; atkSpeedMult?: number; evasionAdd?: number; armorAdd?: number }
+  | { type: 'aura'; radius: number; dmgMult?: number; atkSpeedMult?: number; evasionAdd?: number; armorAdd?: number; unique?: boolean }
   | { type: 'towerAura'; radius: number; dmgMult?: number; atkSpeedMult?: number }
   | { type: 'phalanx'; radius: number; minAllies: number; armorAdd: number; dmgMult: number }
   | { type: 'focusFire'; radius: number; dmgMult: number }
@@ -64,7 +64,13 @@ export type Trait =
   | { type: 'summon'; unitId: string; interval: number; count: number }
   | { type: 'selfDestruct'; damage: number; radius: number }
   | { type: 'siege'; buildingDmgMult: number }
-  | { type: 'cleave'; radius: number; ratio: number };
+  | { type: 'cleave'; radius: number; ratio: number }
+  /** Every hit on a building pockets gold from the player's treasury. */
+  | { type: 'stealGold'; amount: number }
+  /** Regenerates a share of max HP per second. */
+  | { type: 'regen'; pct: number }
+  /** Once below `threshold` HP: transforms, gaining power and calling reinforcements. */
+  | { type: 'enrage'; threshold: number; dmgMult: number; atkSpeedMult: number; speedMult: number; summon?: { unitId: string; count: number } };
 
 export type CharacterBase =
   | 'Knight'
@@ -92,7 +98,9 @@ export type Extra =
   | 'spear'
   | 'bow'
   | 'hammer'
-  | 'banner';
+  | 'banner'
+  | 'goblinEars'
+  | 'tusks';
 
 export interface ModelSpec {
   base: CharacterBase;
@@ -115,7 +123,7 @@ export interface ModelSpec {
 export interface UnitDef {
   id: string;
   name: string;
-  race: RaceId | 'monster';
+  race: RaceId | 'monster' | 'mercenary';
   role: string;
   desc: string;
   hp: number;
@@ -157,9 +165,13 @@ export type BuildingSpecial =
   | { type: 'forge'; towerDmg: number[] }
   | { type: 'sacrificePit'; perDeath: number[]; cap: number }
   | { type: 'sanctum'; castleRepair: number[] }
-  | { type: 'lightTower'; heal: number[]; interval: number; range: number };
+  | { type: 'lightTower'; heal: number[]; interval: number; range: number }
+  /** Heals every soldier in range by a share of max HP per second. */
+  | { type: 'healAura'; pctPerSec: number[]; radius: number }
+  /** While standing, every soldier deals more damage and moves faster. */
+  | { type: 'warBanner'; dmg: number[]; speed: number[] };
 
-export type BuildingKind = 'castle' | 'resource' | 'barracks' | 'tower';
+export type BuildingKind = 'castle' | 'resource' | 'barracks' | 'tower' | 'support';
 
 export interface BuildingModel {
   pack: 'buildings' | 'env' | 'halloween' | 'dungeon';
@@ -172,6 +184,8 @@ export interface BuildingDef {
   name: string;
   race: RaceId | 'all';
   kind: Exclude<BuildingKind, 'castle'>;
+  /** Campaign-only building that must be unlocked by liberating a territory; limited to one per battle. */
+  campaignOnly?: boolean;
   cost: number;
   castleLevel: number;
   hp: number;
@@ -257,6 +271,14 @@ export interface Modifiers {
   engineerMult: number;
   healMult: number;
   castleDmgMult: number;
+  castleIncomeMult: number;
+  /** Extra range for all ranged soldiers. */
+  rangeAddAll: number;
+  towerRangeAdd: number;
+  enemyHpMult: number;
+  enemyDmgMult: number;
+  enemySpeedMult: number;
+  enemyEvasionAdd: number;
 }
 
 export interface BoonDef {

@@ -1,6 +1,21 @@
 import './ui/styles.css';
+import { loadAudioPrefs, Music, saveAudioPrefs } from './audio/music';
 import { Sfx } from './audio/sfx';
 import { Battle } from './game/battle';
+import {
+  createLevelState,
+  isAttackable,
+  isClassicUnlocked,
+  loadCampaign,
+  newCampaign,
+  recordBattle,
+  saveCampaign,
+  unlockClassic,
+  type BattleRecord,
+  type CampaignState,
+} from './game/campaign/campaign';
+import { TERRAINS } from './game/campaign/terrain';
+import { getTerritory } from './game/campaign/territories';
 import { DT, FINAL_WAVE } from './game/constants';
 import { getBuilding, UNITS } from './game/data/index';
 import {
@@ -26,19 +41,36 @@ import {
 import type { RaceId, Stance } from './game/types';
 import { loadAssets, type Assets } from './render/assets';
 import { BattleView } from './render/battleView';
+import { Cutscene } from './render/cutscene';
 import { Effects } from './render/effects';
+import { MapView } from './render/mapView';
 import { TownView } from './render/town';
-import { World } from './render/world';
+import { CLASSIC_SETTING, World } from './render/world';
+import { CampaignUi } from './ui/campaignUi';
 import { Ui, type Selection } from './ui/ui';
+
+/** Top-level screens of the game. */
+type Mode = 'loading' | 'title' | 'raceSelect' | 'cutscene' | 'map' | 'level' | 'classic' | 'farewell';
 
 class App {
   private readonly world: World;
   private readonly ui: Ui;
+  private readonly cui: CampaignUi;
   private readonly sfx = new Sfx();
+  private readonly music = new Music();
   private assets!: Assets;
   private town!: TownView;
   private fx!: Effects;
   private battleView!: BattleView;
+  private map!: MapView;
+  private cutscene!: Cutscene;
+  private mode: Mode = 'loading';
+  private raceSelectMode: 'campaign' | 'classic' = 'campaign';
+  private campaign: CampaignState | null = null;
+  private levelId: string | null = null;
+  private mapSelected: string | null = null;
+  private cutsceneKind: 'intro' | 'ending' = 'intro';
+  private endingRecord: BattleRecord | null = null;
   private state: GameState | null = null;
   private battle: Battle | null = null;
   private selection: Selection | null = null;
@@ -49,6 +81,9 @@ class App {
 
   constructor(root: HTMLElement) {
     this.world = new World(root);
+    const prefs = loadAudioPrefs();
+    this.sfx.setMuted(!prefs.sfx);
+    this.music.setMuted(!prefs.music);
     this.ui = new Ui(root, {
       previewRace: (race) => this.preview(race),
       startGame: (race) => this.startGame(race),
@@ -62,14 +97,30 @@ class App {
       setSpeed: (s) => (this.speed = s),
       setStance: (s) => this.doSetStance(s),
       chooseBoon: (id) => this.doChooseBoon(id),
-      backToTitle: () => this.backToTitle(),
+      backToTitle: () => this.goTitle(),
       continueEndless: () => this.doContinueEndless(),
-      toggleMute: () => {
-        this.sfx.setMuted(!this.sfx.muted);
-        return this.sfx.muted;
-      },
+      toggleMusic: () => this.toggleAudio('music'),
+      toggleSfx: () => this.toggleAudio('sfx'),
       deselect: () => this.select(null),
+      retreat: () => this.goMap(),
+      retry: () => this.levelId && this.startLevel(this.levelId),
+      backToMap: () => this.goMap(),
     });
+    this.ui.audio = prefs;
+    this.cui = new CampaignUi(
+      root,
+      {
+        continueCampaign: () => this.continueCampaign(),
+        newCampaign: () => this.openRaceSelect('campaign'),
+        classic: () => this.openRaceSelect('classic'),
+        exit: () => this.exit(),
+        skipCutscene: () => this.endCutscene(),
+        selectTerritory: (id) => this.selectTerritory(id),
+        attack: (id) => this.startLevel(id),
+        backToTitle: () => this.goTitle(),
+      },
+      this.ui,
+    );
   }
 
   async init(): Promise<void> {
@@ -80,47 +131,198 @@ class App {
     this.fx = new Effects(this.world, this.assets);
     this.town.onBuilt = (x, z) => this.fx.burst(x, 0.5, z, '#d6c7a1', 24, 3, 0.6, 0.8, 3, 1.4);
     this.battleView = new BattleView(this.world, this.assets, this.fx, this.town, { play: (n) => this.sfx.play(n) });
+    this.map = new MapView(this.assets);
+    this.cutscene = new Cutscene(this.assets, this.map);
+    this.campaign = loadCampaign();
     this.bindInput();
     window.addEventListener('resize', () => this.onResize());
     this.ui.hideLoading();
-    this.preview('human');
-    this.ui.showTitle('human');
-    this.onResize();
+    this.goTitle();
     requestAnimationFrame(() => this.loop());
   }
 
-  private onResize(): void {
-    this.world.setInsets(this.ui.insets);
-    this.fx.resize();
+  private toggleAudio(kind: 'music' | 'sfx'): boolean {
+    if (kind === 'music') this.music.setMuted(!this.music.muted);
+    else this.sfx.setMuted(!this.sfx.muted);
+    const prefs = { music: !this.music.muted, sfx: !this.sfx.muted };
+    this.ui.audio = prefs;
+    saveAudioPrefs(prefs);
+    this.sfx.play('click');
+    return kind === 'music' ? prefs.music : prefs.sfx;
   }
 
-  /** Show a race's castle behind the title screen. */
+  private onResize(): void {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.world.setInsets(this.ui.insets);
+    this.fx.resize();
+    this.map.resize(w, h, this.mode === 'map' ? this.cui.mapInsets : { left: 0, right: 0, top: 0, bottom: 0 });
+    this.cutscene.resize(w, h);
+  }
+
+  private setMode(mode: Mode): void {
+    this.mode = mode;
+    document.body.style.cursor = '';
+    this.onResize();
+  }
+
+  // ---------------------------------------------------------------- screens
+
+  private goTitle(): void {
+    this.endBattle();
+    this.ui.hideHud();
+    this.campaign = loadCampaign() ?? this.campaign;
+    this.map.setCampaign(this.campaign, this.campaign?.race ?? 'human');
+    this.map.setSelected(null);
+    this.map.mode = 'orbit';
+    this.setMode('title');
+    this.cui.showTitleMenu(this.campaign, isClassicUnlocked());
+    this.music.play('title');
+  }
+
+  private openRaceSelect(mode: 'campaign' | 'classic'): void {
+    this.sfx.play('click');
+    this.raceSelectMode = mode;
+    this.cui.hideAll();
+    this.setMode('raceSelect');
+    this.preview('human');
+    this.ui.showTitle('human', mode);
+  }
+
+  /** Shows a race behind the race picker: its castle (classic) or its colours on the map (campaign). */
   private preview(race: RaceId): void {
-    const s = newGame(race, 1);
-    this.town.sync(s, false);
+    if (this.raceSelectMode === 'classic') {
+      this.world.buildEnvironment(this.assets, { ...CLASSIC_SETTING, race });
+      this.town.sync(newGame(race, 1), false);
+    } else {
+      this.map.setCampaign(null, race);
+    }
   }
 
   private startGame(race: RaceId): void {
     this.sfx.play('click');
+    if (this.raceSelectMode === 'campaign') {
+      this.campaign = newCampaign(race);
+      saveCampaign(this.campaign);
+      this.ui.closeOverlay();
+      this.mapSelected = null;
+      this.startCutscene('intro');
+      return;
+    }
     this.state = newGame(race);
+    this.levelId = null;
     this.selection = null;
+    this.world.buildEnvironment(this.assets, { ...CLASSIC_SETTING, race });
     this.ui.closeOverlay();
+    this.setMode('classic');
     this.refresh(false);
     this.onResize();
+    this.music.play('battle');
     this.ui.banner('第 1 波即將來襲', '點選空地建造建築，準備好就開戰！');
   }
 
-  private backToTitle(): void {
-    this.battleView.end();
+  private continueCampaign(): void {
+    this.sfx.play('click');
+    if (!this.campaign) return;
+    this.mapSelected = null;
+    this.goMap();
+  }
+
+  private startCutscene(kind: 'intro' | 'ending'): void {
+    if (!this.campaign) return;
+    this.cutsceneKind = kind;
+    this.ui.hideHud();
+    this.cui.showCutscene();
+    this.setMode('cutscene');
+    this.cutscene.start(kind, this.campaign.race, this.campaign);
+    this.music.play(kind === 'intro' ? 'story' : 'ending');
+  }
+
+  private endCutscene(): void {
+    if (this.mode !== 'cutscene') return;
+    this.cutscene.skip();
+    if (this.cutsceneKind === 'intro') {
+      this.goMap();
+      return;
+    }
+    const c = this.campaign!;
+    const rec = this.endingRecord ?? { liberated: true, capital: true, allLiberated: false };
+    this.goMap();
+    this.music.play('ending');
+    this.cui.showEnding(
+      c,
+      rec,
+      () => {
+        this.cui.showMap(c, this.mapSelected);
+        this.music.play('map');
+      },
+      () => this.goTitle(),
+    );
+  }
+
+  private goMap(conquered?: string): void {
+    const c = this.campaign;
+    if (!c) return this.goTitle();
+    this.endBattle();
+    this.ui.hideHud();
+    this.map.setCampaign(c, c.race);
+    this.map.mode = 'map';
+    if (conquered) this.map.playConquest(conquered);
+    if (!this.mapSelected || !isAttackable(c, this.mapSelected)) this.mapSelected = conquered ?? null;
+    this.map.setSelected(this.mapSelected);
+    this.cui.showMap(c, this.mapSelected);
+    this.setMode('map');
+    this.music.play('map');
+  }
+
+  private selectTerritory(id: string | null): void {
+    if (this.mode !== 'map' || !this.campaign) return;
+    if (id) this.sfx.play('click');
+    this.mapSelected = id;
+    this.map.setSelected(id);
+    this.cui.renderMap(this.campaign, id);
+  }
+
+  private startLevel(id: string): void {
+    const c = this.campaign;
+    if (!c) return;
+    this.sfx.play('horn');
+    const t = getTerritory(id);
+    this.endBattle();
+    this.levelId = id;
+    this.state = createLevelState(c, id, Date.now() % 1_000_000);
+    this.selection = null;
+    this.world.buildEnvironment(this.assets, { terrain: t.terrain, faction: t.faction ?? 'undead', race: c.race });
+    this.cui.hideAll();
+    this.ui.closeOverlay();
+    this.setMode('level');
+    this.refresh(false);
+    this.onResize();
+    this.music.play('battle');
+    this.ui.banner(t.name, TERRAINS[t.terrain].effect);
+  }
+
+  private exit(): void {
+    this.sfx.play('click');
+    window.close();
+    // Browsers only let scripts close windows they opened themselves.
+    setTimeout(() => {
+      if (window.closed) return;
+      this.setMode('farewell');
+      this.music.stop();
+      this.cui.showFarewell(() => this.goTitle());
+    }, 150);
+  }
+
+  private endBattle(): void {
+    if (this.battle) this.battleView.end();
     this.battle = null;
     this.state = null;
     this.selection = null;
-    this.town.setSelected(null);
-    this.ui.closeOverlay();
-    this.preview('human');
-    this.ui.showTitle('human');
-    this.onResize();
+    this.town?.setSelected(null);
   }
+
+  // ---------------------------------------------------------------- level helpers
 
   private refresh(animate = true): void {
     if (!this.state) return;
@@ -245,6 +447,7 @@ class App {
     this.acc = 0;
     this.sfx.play('horn');
     const wave = this.battle.waveDef;
+    if (wave.boss) this.music.play('boss');
     this.ui.banner(`第 ${s.wave} 波`, wave.title ?? '敵軍來襲！');
     this.refresh(false);
   }
@@ -257,6 +460,8 @@ class App {
     this.battleView.end();
     const report = applyBattleOutcome(s, outcome);
     this.refresh(false);
+    this.music.play('battle');
+    if (this.mode === 'level') return this.finishLevelWave(s, report.wave, report.total);
     if (s.phase === 'over') {
       this.sfx.play('defeat');
       this.ui.showGameOver(s);
@@ -271,23 +476,80 @@ class App {
     }
   }
 
+  private finishLevelWave(s: GameState, wave: number, gold: number): void {
+    const c = this.campaign!;
+    const id = this.levelId!;
+    if (s.phase === 'over') {
+      recordBattle(c, id, false, s.stats.kills);
+      saveCampaign(c);
+      this.sfx.play('defeat');
+      this.music.play('story');
+      this.ui.showGameOver(s);
+      return;
+    }
+    if (s.phase !== 'victory') {
+      this.sfx.play('coin');
+      this.ui.banner(`第 ${wave} 波勝利！`, `+${gold} 金`);
+      return;
+    }
+    const rec = recordBattle(c, id, true, s.stats.kills);
+    saveCampaign(c);
+    if (rec.capital) unlockClassic();
+    this.sfx.play('victory');
+    this.music.play('ending');
+    this.ui.hideHud();
+    this.cui.showLiberated(c, id, s.stats.kills, () => {
+      if (rec.capital) {
+        this.endingRecord = rec;
+        this.mapSelected = null;
+        this.endBattle();
+        this.startCutscene('ending');
+        return;
+      }
+      this.goMap(id);
+      if (rec.allLiberated) this.cui.showFullClear(c, () => this.cui.showMap(c, this.mapSelected));
+    });
+  }
+
   // ---------------------------------------------------------------- input & loop
+
+  private get inLevel(): boolean {
+    return this.mode === 'level' || this.mode === 'classic';
+  }
 
   private bindInput(): void {
     const canvas = this.world.renderer.domElement;
     canvas.addEventListener('mousemove', (e) => {
-      if (!this.state || this.battle || this.ui.overlayOpen) return this.town.setHover(null);
+      if (this.mode === 'map') {
+        const id = this.cui.menuOpen ? null : this.map.pick(e.clientX, e.clientY);
+        this.map.setHover(id);
+        document.body.style.cursor = id ? 'pointer' : '';
+        return;
+      }
+      if (!this.inLevel || !this.state || this.battle || this.ui.overlayOpen) return this.town.setHover(null);
       this.town.setHover(this.town.pickTile(e.clientX, e.clientY));
     });
-    canvas.addEventListener('mouseleave', () => this.town.setHover(null));
+    canvas.addEventListener('mouseleave', () => {
+      this.town.setHover(null);
+      this.map?.setHover(null);
+    });
     canvas.addEventListener('click', (e) => {
-      if (!this.state || this.battle || this.ui.overlayOpen || this.state.phase !== 'prep') return;
+      if (this.mode === 'map') {
+        if (this.cui.menuOpen) return;
+        this.selectTerritory(this.map.pick(e.clientX, e.clientY));
+        return;
+      }
+      if (!this.inLevel || !this.state || this.battle || this.ui.overlayOpen || this.state.phase !== 'prep') return;
       const t = this.town.pickTile(e.clientX, e.clientY);
       if (t) this.sfx.play('click');
       this.select(t);
     });
     window.addEventListener('keydown', (e) => {
-      if (!this.state) return;
+      if (this.mode === 'cutscene') {
+        if (e.key === 'Escape') this.endCutscene();
+        return;
+      }
+      if (!this.inLevel || !this.state) return;
       if (e.code === 'Space') {
         e.preventDefault();
         if (!this.ui.overlayOpen) this.startWave();
@@ -313,29 +575,68 @@ class App {
     const now = performance.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
     this.last = now;
+    const renderer = this.world.renderer;
 
-    if (this.battle) {
-      this.acc += dt * this.speed;
-      let steps = 0;
-      while (this.acc >= DT && steps < 16) {
-        this.battle.step(DT);
-        this.battleView.handleEvents(this.battle.drainEvents());
-        this.acc -= DT;
-        steps++;
+    switch (this.mode) {
+      case 'cutscene': {
+        const frame = this.cutscene.update(dt);
+        this.cui.updateCutscene(frame);
+        if (this.cutscene.finished) this.endCutscene();
+        const target = this.cutscene.target;
+        renderer.render(target.scene, target.camera);
+        break;
       }
-      if (steps >= 16) this.acc = 0;
-      this.battleView.update(dt * this.speed, Math.min(1, this.acc / DT));
-      this.uiTimer -= dt;
-      if (this.uiTimer <= 0) {
-        this.uiTimer = 0.25;
-        this.ui.updateBattle(this.battle);
-      }
-      if (this.battle.finished) this.finishWave();
+      case 'map':
+        this.map.update(dt);
+        this.cui.updateLabels(this.map.labelPositions());
+        renderer.render(this.map.scene, this.map.camera);
+        break;
+      case 'title':
+      case 'farewell':
+        this.map.update(dt);
+        renderer.render(this.map.scene, this.map.camera);
+        break;
+      case 'raceSelect':
+        if (this.raceSelectMode === 'campaign') {
+          this.map.update(dt);
+          renderer.render(this.map.scene, this.map.camera);
+        } else {
+          this.town.update(dt);
+          this.fx.update(dt);
+          this.world.render();
+        }
+        break;
+      case 'level':
+      case 'classic':
+        this.stepBattle(dt);
+        this.town.update(dt);
+        this.fx.update(dt * (this.battle ? this.speed : 1));
+        this.world.render();
+        break;
+      default:
+        break;
     }
-    this.town.update(dt);
-    this.fx.update(dt * (this.battle ? this.speed : 1));
-    this.world.render();
     requestAnimationFrame(() => this.loop());
+  }
+
+  private stepBattle(dt: number): void {
+    if (!this.battle) return;
+    this.acc += dt * this.speed;
+    let steps = 0;
+    while (this.acc >= DT && steps < 16) {
+      this.battle.step(DT);
+      this.battleView.handleEvents(this.battle.drainEvents());
+      this.acc -= DT;
+      steps++;
+    }
+    if (steps >= 16) this.acc = 0;
+    this.battleView.update(dt * this.speed, Math.min(1, this.acc / DT));
+    this.uiTimer -= dt;
+    if (this.uiTimer <= 0) {
+      this.uiTimer = 0.25;
+      this.ui.updateBattle(this.battle);
+    }
+    if (this.battle.finished) this.finishWave();
   }
 }
 
@@ -347,14 +648,14 @@ if (import.meta.env.DEV) {
     const { simulateBattle } = await import('./game/battle');
     const a = app as unknown as { state: GameState; refresh(animate?: boolean): void };
     const plan = { n: 0 };
-    while (a.state.wave < wave && a.state.phase !== 'over') {
+    while (a.state.wave < wave && a.state.phase !== 'over' && a.state.phase !== 'victory') {
       if (a.state.phase === 'boon') chooseBoon(a.state, a.state.boonChoices[0]);
       botPrepare(a.state, plan);
       a.state.phase = 'battle';
       applyBattleOutcome(a.state, simulateBattle(a.state).outcome());
     }
     if (a.state.phase === 'boon') chooseBoon(a.state, a.state.boonChoices[0]);
-    botPrepare(a.state, plan);
+    if (a.state.phase === 'prep') botPrepare(a.state, plan);
     a.refresh(false);
   };
   Object.assign(window, { __app: app, __units: UNITS, __skipTo: devSkipTo });

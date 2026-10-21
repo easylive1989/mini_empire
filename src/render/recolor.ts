@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import type { CharacterBase, RaceId } from '../game/types';
 
 /** Building atlas: the team-coloured parts sample the bottom-left cell of the palette texture. */
-const BUILDING_TEAM: Record<RaceId, [string, string] | null> = {
+const BUILDING_TEAM: Record<RaceId | 'shadow', [string, string] | null> = {
+  shadow: ['#5b5266', '#1a1420'],
   human: null,
   elf: ['#6fe08c', '#14532d'],
   dwarf: ['#ffd27a', '#b4441a'],
@@ -33,7 +34,7 @@ function canvasTexture(canvas: HTMLCanvasElement, like: THREE.Texture): THREE.Te
 const buildingMats = new Map<string, THREE.Material>();
 
 /** Returns a material for buildings of a race, recolouring the shared atlas once per race. */
-export function buildingMaterial(original: THREE.Material, race: RaceId): THREE.Material {
+export function buildingMaterial(original: THREE.Material, race: RaceId | 'shadow'): THREE.Material {
   const key = `${original.uuid}:${race}`;
   const cached = buildingMats.get(key);
   if (cached) return cached;
@@ -98,7 +99,26 @@ export const PALETTES: Record<string, Palette> = {
   king: { tint: '#ffe08a', emissive: '#3a2a00' },
   lich: { tint: '#b794f4', emissive: '#2a0a4a' },
   deathknight: { team: '#7f1d1d', accent: '#111827', skin: '#475569', tint: '#8a7a7a', emissive: '#200000' },
+  // Campaign factions.
+  goblin: { team: '#6b4a2b', accent: '#a8a29e', skin: '#7cc04b' },
+  goblinShaman: { team: '#4d7c0f', accent: '#facc15', skin: '#7cc04b' },
+  troll: { team: '#57534e', accent: '#3f3f46', skin: '#6f9c8a', tint: '#c3d1bf' },
+  goblinKing: { team: '#b45309', accent: '#facc15', skin: '#7cc04b', emissive: '#1a1000' },
+  orc: { team: '#44403c', accent: '#991b1b', skin: '#5f8f3a' },
+  orcShaman: { team: '#7c2d12', accent: '#fbbf24', skin: '#5f8f3a' },
+  orcBoss: { team: '#1c1917', accent: '#dc2626', skin: '#4f7d2e', emissive: '#140400' },
+  orcAlly: { team: '#1d4ed8', accent: '#facc15', skin: '#5f8f3a' },
+  rebel: { team: '#57534e', accent: '#9f1239' },
+  assassin: { team: '#1f2937', accent: '#9f1239' },
+  usurper: { team: '#581c87', accent: '#facc15', emissive: '#12001f' },
+  demonlord: { team: '#0c0a09', accent: '#f97316', skin: '#7f1d1d', tint: '#e5b8a8', emissive: '#3a0800' },
+  mercenary: { team: '#92400e', accent: '#d6d3d1' },
 };
+
+/** Skin colour used for model extras (ears, tusks...) so they match the palette. */
+export function paletteSkin(paletteId: string | undefined, fallback: string): string {
+  return (paletteId && PALETTES[paletteId]?.skin) || fallback;
+}
 
 type HueRange = [number, number, number];
 /** Hue ranges (deg) + min saturation that count as clothing in each character texture. */

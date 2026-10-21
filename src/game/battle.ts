@@ -1,5 +1,6 @@
 import { CASTLE, DT, SPAWN_X, SPAWN_Z_SPREAD, TILE, UNIT_LEVEL_MULT, BUILDING_LEVEL_HP_MULT } from './constants';
 import { getBuilding, getUnit, RACE_MAP } from './data/index';
+import { getCampaignWave } from './campaign/campaignWaves';
 import { getWave } from './data/waves';
 import { Rng } from './rng';
 import { castleMaxHp, getModifiers, tileBonuses, type BattleOutcome, type GameState } from './state';
@@ -59,6 +60,8 @@ export interface Entity {
   attackAnim: number;
   summoned: boolean;
   resurrected: boolean;
+  /** Set once an `enrage` trait has fired. */
+  enraged: boolean;
   // Per-tick derived multipliers.
   dmgMult: number;
   atkSpeedMult: number;
@@ -126,7 +129,9 @@ export type BattleEvent =
   | { type: 'resurrect'; id: number }
   | { type: 'charm'; id: number }
   | { type: 'gold'; x: number; z: number; amount: number }
-  | { type: 'chain'; points: { x: number; z: number }[] };
+  | { type: 'chain'; points: { x: number; z: number }[] }
+  | { type: 'steal'; x: number; z: number; amount: number }
+  | { type: 'enrage'; id: number };
 
 interface SpawnOpts {
   homeUid?: number | null;
@@ -176,6 +181,11 @@ function dist2(ax: number, az: number, bx: number, bz: number): number {
   return dx * dx + dz * dz;
 }
 
+/** The wave a game state is about to fight (campaign territory or classic mode). */
+export function waveForState(state: GameState): WaveDef {
+  return state.level ? getCampaignWave(state.level.territoryId, Math.min(state.wave, state.level.totalWaves)) : getWave(state.wave);
+}
+
 export class Battle {
   readonly state: GameState;
   readonly mods: Modifiers;
@@ -193,6 +203,10 @@ export class Battle {
   kills = 0;
   bounty = 0;
   playerDeaths = 0;
+  goldStolen = 0;
+  /** Damage / speed bonus from a standing war monument this tick. */
+  bannerDmg = 0;
+  bannerSpeed = 0;
   souls = 0;
   result: 'win' | 'lose' | null = null;
   private endTimer = -1;
@@ -207,7 +221,7 @@ export class Battle {
     this.state = state;
     this.mods = getModifiers(state);
     this.wave = state.wave;
-    this.waveDef = getWave(state.wave);
+    this.waveDef = waveForState(state);
     this.rng = new Rng(state.seed ^ (state.wave * 0x9e3779b1));
     let maxI = 1;
     for (const t of state.tiles) if (t.owned) maxI = Math.max(maxI, t.i);
@@ -314,8 +328,8 @@ export class Battle {
       dmgScale = levelMult;
     } else {
       const w = this.waveDef;
-      maxHp = def.hp * (def.boss ? w.bossHpMult : w.hpMult);
-      dmgScale = def.boss ? Math.max(1, w.bossHpMult / 2) ** 0.5 : w.dmgMult;
+      maxHp = def.hp * (def.boss ? w.bossHpMult : w.hpMult) * this.mods.enemyHpMult;
+      dmgScale = (def.boss ? Math.max(1, w.bossHpMult / 2) ** 0.5 : w.dmgMult) * this.mods.enemyDmgMult;
     }
     maxHp = Math.round(maxHp);
     const e: Entity = {
@@ -355,6 +369,7 @@ export class Battle {
       attackAnim: 0,
       summoned: opts.summoned ?? false,
       resurrected: false,
+      enraged: false,
       dmgMult: 1,
       atkSpeedMult: 1,
       armorAdd: 0,
@@ -569,6 +584,7 @@ export class Battle {
     }
     const hpDmg = dmg - absorbed;
     target.hp -= hpDmg;
+    if (target.hp > 0) this.checkEnrage(target);
     target.lastDamagedAt = this.time;
     if (!opts.silent) {
       this.events.push({ type: 'hit', x: target.x, z: target.z, y: target.flying ? 2 : 0.8, dmgType: type, amount: dmg, crit });
@@ -586,6 +602,11 @@ export class Battle {
     let dmg = amount;
     const siege = attacker?.def.traits?.find((t) => t.type === 'siege') as { buildingDmgMult: number } | undefined;
     if (siege) dmg *= siege.buildingDmgMult;
+    const steal = attacker?.def.traits?.find((t) => t.type === 'stealGold') as { amount: number } | undefined;
+    if (steal && !b.destroyed) {
+      this.goldStolen += steal.amount;
+      this.events.push({ type: 'steal', x: b.x, z: b.z, amount: steal.amount });
+    }
     b.hp -= dmg;
     this.events.push({ type: 'buildingHit', uid: b.uid, amount: dmg });
     if (b.hp <= 0) {
@@ -738,6 +759,7 @@ export class Battle {
       kills: this.kills,
       bounty: this.bounty,
       playerDeaths: this.playerDeaths,
+      goldStolen: this.goldStolen,
     };
   }
 
@@ -778,6 +800,8 @@ export class Battle {
           delete e.statuses[key];
         }
       }
+      const regen = e.def.traits?.find((t) => t.type === 'regen') as { pct: number } | undefined;
+      if (e.alive && regen && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * regen.pct * dt);
       if (e.alive && e.baseTeam === 'player' && this.mods.regenPct > 0 && this.time - e.lastDamagedAt > 3 && e.hp < e.maxHp) {
         e.hp = Math.min(e.maxHp, e.hp + e.maxHp * this.mods.regenPct * dt);
       }
@@ -785,7 +809,42 @@ export class Battle {
   }
 
   /** Recompute auras and passive multipliers. */
+  /** Attack range including campaign/boon range bonuses for ranged soldiers. */
+  rangeOf(e: Entity): number {
+    const r = e.def.range;
+    if (e.baseTeam !== 'player' || r <= 2.5) return r;
+    return r + this.mods.rangeAddAll + (this.mods.rangeAdd[e.def.id] ?? 0);
+  }
+
+  /** Fires an `enrage` trait the first time its owner drops below the threshold. */
+  private checkEnrage(e: Entity): void {
+    if (e.enraged) return;
+    const en = e.def.traits?.find((t) => t.type === 'enrage') as
+      | { threshold: number; summon?: { unitId: string; count: number } }
+      | undefined;
+    if (!en || e.hp / e.maxHp > en.threshold) return;
+    e.enraged = true;
+    this.events.push({ type: 'enrage', id: e.id });
+    if (en.summon) {
+      for (let k = 0; k < en.summon.count; k++) {
+        const a = (k / en.summon.count) * Math.PI * 2;
+        const u = this.createEntity(getUnit(en.summon.unitId), e.team, e.x + Math.cos(a) * 2, e.z + Math.sin(a) * 2, { summoned: true });
+        u.cooldown = 1;
+      }
+      this.events.push({ type: 'aoe', x: e.x, z: e.z, radius: 3.5, kind: 'summon' });
+    }
+  }
+
   private updateDerived(): void {
+    this.bannerDmg = 0;
+    this.bannerSpeed = 0;
+    for (const b of this.buildings) {
+      const sp = b.def?.special;
+      if (sp?.type === 'warBanner' && !b.destroyed) {
+        this.bannerDmg = Math.max(this.bannerDmg, sp.dmg[b.level - 1]);
+        this.bannerSpeed = Math.max(this.bannerSpeed, sp.speed[b.level - 1]);
+      }
+    }
     const m = this.mods;
     // Human combined arms.
     let combined = 0;
@@ -811,10 +870,19 @@ export class Battle {
       let eva = 0;
       if (e.baseTeam === 'player') {
         const st = STANCES[this.stance];
-        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus) * st.dmgMult;
+        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus + this.bannerDmg) * st.dmgMult;
         spd *= 1 + combined;
         armor += m.unitArmorAdd + st.armorAdd;
         eva += m.unitEvasionAdd;
+      } else {
+        eva += m.enemyEvasionAdd;
+      }
+      if (e.enraged) {
+        const en = e.def.traits?.find((t) => t.type === 'enrage') as { dmgMult: number; atkSpeedMult: number } | undefined;
+        if (en) {
+          dmg *= en.dmgMult;
+          spd *= en.atkSpeedMult;
+        }
       }
       for (const tr of e.def.traits ?? []) {
         if (tr.type === 'phalanx') {
@@ -842,13 +910,20 @@ export class Battle {
       e.armorAdd = armor;
       e.evasionAdd = eva;
     }
-    // Unit auras.
+    // Unit auras. A unique aura affects each unit once, however many of its source stand nearby.
+    const uniqueAuras = new Map<Entity, Set<string>>();
     for (const src of this.entities) {
       if (!src.alive) continue;
       for (const tr of src.def.traits ?? []) {
         if (tr.type !== 'aura') continue;
         for (const o of this.alliesInRadius(src.team, src.x, src.z, tr.radius)) {
           if (o === src && tr.atkSpeedMult) continue;
+          if (tr.unique) {
+            const got = uniqueAuras.get(o) ?? new Set<string>();
+            if (got.has(src.def.id)) continue;
+            got.add(src.def.id);
+            uniqueAuras.set(o, got);
+          }
           if (tr.dmgMult) o.dmgMult *= tr.dmgMult;
           if (tr.atkSpeedMult) o.atkSpeedMult *= tr.atkSpeedMult;
           if (tr.evasionAdd) o.evasionAdd += tr.evasionAdd;
@@ -1040,7 +1115,10 @@ export class Battle {
     const d = Math.hypot(dx, dz);
     if (d <= stopDist) return false;
     if (this.has(e, 'root') || this.has(e, 'stun')) return false;
-    let speed = e.def.speed * (e.baseTeam === 'player' ? this.mods.unitSpeedMult * STANCES[this.stance].speedMult : 1);
+    let speed =
+      e.def.speed *
+      (e.baseTeam === 'player' ? this.mods.unitSpeedMult * STANCES[this.stance].speedMult * (1 + this.bannerSpeed) : this.mods.enemySpeedMult);
+    if (e.enraged) speed *= (e.def.traits?.find((t) => t.type === 'enrage') as { speedMult: number } | undefined)?.speedMult ?? 1;
     const sl = e.statuses.slow;
     if (sl && sl.t > 0) speed *= sl.v;
     if (this.has(e, 'rune')) speed *= 0.75;
@@ -1085,7 +1163,7 @@ export class Battle {
     if (building?.destroyed) e.targetBuilding = null;
 
     if (target) {
-      const reach = e.def.range + target.radius + e.radius * 0.5;
+      const reach = this.rangeOf(e) + target.radius + e.radius * 0.5;
       const d = Math.hypot(target.x - e.x, target.z - e.z);
       if (d > reach) {
         if (e.def.ai === 'engineer' && !this.engineerMayChase(e, target)) {
@@ -1101,7 +1179,7 @@ export class Battle {
     }
     if (e.targetBuilding !== null && !actsAsPlayer) {
       const b = this.getBuilding(e.targetBuilding)!;
-      const reach = e.def.range + b.radius;
+      const reach = this.rangeOf(e) + b.radius;
       const d = Math.hypot(b.x - e.x, b.z - e.z);
       if (d > reach) this.moveToward(e, b.x, b.z, reach * 0.9, dt);
       else {
@@ -1188,10 +1266,10 @@ export class Battle {
         e.def.ai === 'engineer'
           ? 4
           : e.def.ai === 'support'
-            ? Math.max(e.def.range + 1, 7)
-            : Math.max(st.acquire + (aggressive ? AGGRESSIVE_BONUS : 0), e.def.range + 1.5);
+            ? Math.max(this.rangeOf(e) + 1, 7)
+            : Math.max(st.acquire + (aggressive ? AGGRESSIVE_BONUS : 0), this.rangeOf(e) + 1.5);
       // Never chase past the stance's leash (keeps "hold" armies under tower cover).
-      const maxX = this.frontX + st.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + e.def.range;
+      const maxX = this.frontX + st.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + this.rangeOf(e);
       const cur = this.getEntity(e.targetId);
       const foe = this.nearestFoe(e, acquire, maxX);
       // Stick to the current target unless something is much closer.
@@ -1262,7 +1340,7 @@ export class Battle {
     const targets: Entity[] = [target];
     const multi = e.def.traits?.find((t) => t.type === 'multishot') as { count: number } | undefined;
     if (multi) {
-      const range = e.def.range + (this.mods.rangeAdd[e.def.id] ?? 0);
+      const range = this.rangeOf(e);
       const extra = this.foesInRadius(e.team, e.x, e.z, range, true)
         .filter((o) => o !== target)
         .sort((a, b) => dist2(e.x, e.z, a.x, a.z) - dist2(e.x, e.z, b.x, b.z))
@@ -1384,6 +1462,18 @@ export class Battle {
       if (b.destroyed) continue;
       // Light tower heal.
       const sp = b.def?.special;
+      if (sp?.type === 'healAura') {
+        b.healTimer -= dt;
+        if (b.healTimer <= 0) {
+          b.healTimer = 0.5;
+          for (const a of this.alliesInRadius('player', b.x, b.z, sp.radius)) {
+            if (a.hp >= a.maxHp) continue;
+            const amount = Math.min(a.maxHp - a.hp, a.maxHp * sp.pctPerSec[b.level - 1] * 0.5 * this.mods.healMult);
+            a.hp += amount;
+            if (this.rng.chance(0.25)) this.events.push({ type: 'heal', id: a.id, amount });
+          }
+        }
+      }
       if (sp?.type === 'lightTower') {
         b.healTimer -= dt;
         if (b.healTimer <= 0) {
@@ -1415,7 +1505,7 @@ export class Battle {
       if (!spec) continue;
       b.cooldown -= dt * b.atkSpeedMult;
       if (b.cooldown > 0) continue;
-      const range = spec.range;
+      const range = spec.range + this.mods.towerRangeAdd;
       let target: Entity | undefined;
       let bestD = range * range;
       for (const o of this.entities) {

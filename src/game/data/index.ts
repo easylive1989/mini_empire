@@ -5,19 +5,29 @@ import { DEMON, DEMON_BUILDINGS, DEMON_UNITS } from './demon';
 import { DWARF, DWARF_BUILDINGS, DWARF_UNITS } from './dwarf';
 import { ELF, ELF_BUILDINGS, ELF_UNITS } from './elf';
 import { HUMAN, HUMAN_BUILDINGS, HUMAN_UNITS } from './human';
+import { FACTION_UNITS } from './factions';
 import { MONSTERS } from './monsters';
+import { SPECIAL_BUILDINGS, SPECIAL_UNITS } from './specials';
 
 export const RACES: RaceDef[] = [HUMAN, ELF, DWARF, DEMON, ANGEL];
 export const RACE_MAP = new Map<RaceId, RaceDef>(RACES.map((r) => [r.id, r]));
 
 export const UNITS = new Map<string, UnitDef>(
-  [...HUMAN_UNITS, ...ELF_UNITS, ...DWARF_UNITS, ...DEMON_UNITS, ...ANGEL_UNITS, ...MONSTERS].map((u) => [u.id, u]),
+  [...HUMAN_UNITS, ...ELF_UNITS, ...DWARF_UNITS, ...DEMON_UNITS, ...ANGEL_UNITS, ...MONSTERS, ...FACTION_UNITS, ...SPECIAL_UNITS].map(
+    (u) => [u.id, u],
+  ),
 );
 
 export const BUILDINGS = new Map<string, BuildingDef>(
-  [...COMMON_BUILDINGS, ...HUMAN_BUILDINGS, ...ELF_BUILDINGS, ...DWARF_BUILDINGS, ...DEMON_BUILDINGS, ...ANGEL_BUILDINGS].map(
-    (b) => [b.id, b],
-  ),
+  [
+    ...COMMON_BUILDINGS,
+    ...HUMAN_BUILDINGS,
+    ...ELF_BUILDINGS,
+    ...DWARF_BUILDINGS,
+    ...DEMON_BUILDINGS,
+    ...ANGEL_BUILDINGS,
+    ...SPECIAL_BUILDINGS,
+  ].map((b) => [b.id, b]),
 );
 
 export function getUnit(id: string): UnitDef {
@@ -32,12 +42,15 @@ export function getBuilding(id: string): BuildingDef {
   return b;
 }
 
-/** Buildings available to a race, in menu order. */
+const KIND_ORDER = { resource: 0, tower: 1, support: 2, barracks: 3 } as const;
+
+export function sortBuildings(list: BuildingDef[]): BuildingDef[] {
+  return list.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.castleLevel - b.castleLevel || a.cost - b.cost);
+}
+
+/** Buildings available to a race (without campaign specials), in menu order. */
 export function raceBuildings(race: RaceId): BuildingDef[] {
-  const kindOrder = { resource: 0, tower: 1, barracks: 2 } as const;
-  return [...BUILDINGS.values()]
-    .filter((b) => b.race === 'all' || b.race === race)
-    .sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind] || a.castleLevel - b.castleLevel || a.cost - b.cost);
+  return sortBuildings([...BUILDINGS.values()].filter((b) => !b.campaignOnly && (b.race === 'all' || b.race === race)));
 }
 
 export function raceUnits(race: RaceId): UnitDef[] {

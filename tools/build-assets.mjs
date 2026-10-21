@@ -138,16 +138,27 @@ async function main() {
     'tree_single_A', 'tree_single_B', 'trees_A_small', 'trees_A_medium', 'trees_B_small', 'trees_B_medium',
     'rock_single_A', 'rock_single_B', 'rock_single_C', 'rock_single_D', 'rock_single_E',
     'hill_single_A', 'hill_single_B', 'mountain_A_grass_trees', 'mountain_B_grass_trees', 'cloud_small', 'cloud_big',
+    'trees_A_large', 'trees_B_large', 'tree_single_A_cut', 'hill_single_C', 'hills_A_trees', 'hills_B', 'mountain_A',
+    'mountain_C_grass', 'waterlily_A', 'waterplant_A', 'waterplant_B',
   ];
+  const tiles = ['hex_grass', 'hex_water', 'hex_coast_A', 'hex_road_A', 'hex_river_A'];
   const neutral = [
     'building_scaffolding', 'building_destroyed', 'building_grain', 'building_dirt',
     'projectile_catapult', 'fence_wood_straight', 'fence_stone_straight', 'wall_straight', 'wall_straight_gate',
+    'building_stage_A', 'building_bridge_A', 'wall_corner_A_outside', 'fence_wood_straight_gate',
   ];
-  const props = ['barrel', 'crate_A_big', 'crate_B_small', 'bucket_arrows', 'flag_blue', 'flag_green', 'flag_red', 'flag_yellow'];
+  const props = [
+    'barrel', 'crate_A_big', 'crate_B_small', 'bucket_arrows', 'flag_blue', 'flag_green', 'flag_red', 'flag_yellow',
+    'tent', 'weaponrack', 'target', 'sack', 'resource_stone', 'resource_lumber', 'wheelbarrow', 'crate_open', 'pallet',
+  ];
   await pack('env.glb', [
     ...nature.map((n) => [n, `${HEX}/decoration/nature/${n}.gltf`]),
     ...neutral.map((n) => [n, `${HEX}/buildings/neutral/${n}.gltf`]),
     ...props.map((n) => [n, `${HEX}/decoration/props/${n}.gltf`]),
+    ...tiles.map((n) => {
+      const sub = ['coast', 'rivers', 'roads'].find((d) => fs.existsSync(`${HEX}/tiles/${d}/${n}.gltf`));
+      return [n, `${HEX}/tiles/${sub ?? 'base'}/${n}.gltf`];
+    }),
   ]);
 
   const halloween = [

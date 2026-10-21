@@ -138,7 +138,7 @@ describe('data integrity', () => {
     for (const b of BUILDINGS.values()) {
       if (b.kind !== 'barracks') continue;
       const u = getUnit(b.unit!);
-      expect(u.race).toBe(b.race);
+      expect(u.race).toBe(b.campaignOnly ? 'mercenary' : b.race);
       expect(b.spawnInterval).toHaveLength(3);
       expect(b.maxAlive).toHaveLength(3);
     }

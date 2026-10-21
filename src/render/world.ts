@@ -1,8 +1,7 @@
 import * as THREE from 'three';
 import { GRID_RADIUS, SPAWN_X, TILE } from '../game/constants';
-import { Rng } from '../game/rng';
 import type { Assets } from './assets';
-import { decoModel } from './models';
+import { buildScenery, ENV_STYLES, type BattleSetting } from './scenery';
 
 export const TILE_TOP = 0.2;
 
@@ -28,6 +27,8 @@ export class World {
   readonly units = new THREE.Group();
   readonly fx = new THREE.Group();
   readonly sun: THREE.DirectionalLight;
+  readonly hemi: THREE.HemisphereLight;
+  private envKey = '';
   insets: ViewInsets = { left: 0, right: 0, top: 0, bottom: 0 };
   /** World units per CSS pixel after fitting. */
   unitsPerPixel = 0.05;
@@ -44,8 +45,8 @@ export class World {
     this.scene.background = new THREE.Color('#9fd3e8');
     this.camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 400);
 
-    const hemi = new THREE.HemisphereLight('#f4fbff', '#6d8a4e', 1.6);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight('#f4fbff', '#6d8a4e', 1.6);
+    this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight('#fff1d6', 2.6);
     this.sun.position.set(20, 45, 30);
     this.sun.target.position.set(14, 0, 0);
@@ -88,6 +89,7 @@ export class World {
       new THREE.Vector3(r, 0, r),
       new THREE.Vector3(SPAWN_X - 3, 0, -7),
       new THREE.Vector3(SPAWN_X - 8, 0, 8),
+      new THREE.Vector3(SPAWN_X + 5, 0, 0),
     ];
     const inv = cam.matrixWorldInverse;
     let minX = Infinity;
@@ -140,112 +142,34 @@ export class World {
     return ray.intersectObjects(objects, true)[0];
   }
 
-  /** Ground, battlefield road, graveyard and scenery. */
-  buildEnvironment(assets: Assets): void {
+  /** Ground, battlefield, enemy camp and scenery for a battle setting (rebuilt only when it changes). */
+  buildEnvironment(assets: Assets, setting: BattleSetting = CLASSIC_SETTING): void {
+    const key = `${setting.terrain}|${setting.faction}|${setting.race}`;
+    if (key === this.envKey) return;
+    this.envKey = key;
+    disposeTree(this.ground);
     this.ground.clear();
-    const size = 160;
-    const tex = paintGround(size);
-    const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(size, size),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }),
-    );
-    plane.rotation.x = -Math.PI / 2;
-    plane.position.set(GROUND_CENTER_X, 0, 0);
-    plane.receiveShadow = true;
-    this.ground.add(plane);
-
-    const rng = new Rng(20261021);
-    const add = (pack: 'env' | 'halloween' | 'dungeon', key: string, x: number, z: number, scale: number, rotY = rng.next() * Math.PI * 2) => {
-      const o = decoModel(assets, pack, key, scale);
-      o.position.set(x, 0, z);
-      o.rotation.y = rotY;
-      this.ground.add(o);
-    };
-
-    // Graveyard the undead pour out of.
-    add('halloween', 'crypt', SPAWN_X + 9, 0, 0.55, -Math.PI / 2);
-    add('halloween', 'arch_gate', SPAWN_X + 3.5, 0, 0.75, Math.PI / 2);
-    for (let k = 0; k < 18; k++) {
-      const z = (k % 2 ? 1 : -1) * (5 + rng.next() * 9);
-      const x = SPAWN_X - 3 + rng.next() * 12;
-      add('halloween', ['gravestone', 'grave_A', 'gravemarker_A', 'post_skull', 'skull', 'lantern_standing'][k % 6], x, z, 0.75, -Math.PI / 2 + (rng.next() - 0.5) * 0.6);
-    }
-    for (let k = 0; k < 8; k++) {
-      add('halloween', ['tree_dead_large', 'tree_dead_medium', 'tree_dead_small'][k % 3], SPAWN_X - 4 + rng.next() * 16, (k % 2 ? 1 : -1) * (12 + rng.next() * 8), 0.75);
-    }
-    for (const side of [-1, 1]) {
-      for (let k = 0; k < 3; k++) {
-        add('halloween', k === 1 ? 'fence_broken' : 'fence', SPAWN_X + 3.5, side * (4.5 + k * 3), 0.75, Math.PI / 2);
-      }
-    }
-
-    // Scenery around the plot, kept off the plot and the battlefield.
-    const r = GRID_RADIUS * TILE + TILE;
-    const nature = ['tree_single_A', 'tree_single_B', 'trees_A_small', 'trees_A_medium', 'trees_B_small', 'trees_B_medium', 'rock_single_C', 'rock_single_E'];
-    let placed = 0;
-    for (let k = 0; k < 600 && placed < 110; k++) {
-      const x = -40 + rng.next() * 110;
-      const z = -40 + rng.next() * 80;
-      if (Math.abs(x) < r + 1 && Math.abs(z) < r + 1) continue;
-      if (x > r - 2 && x < SPAWN_X + 14 && Math.abs(z) < 15) continue;
-      const kind = nature[rng.int(nature.length)];
-      add('env', kind, x, z, (kind.startsWith('rock') ? 4 : 1.7) + rng.next() * 0.8);
-      placed++;
-    }
-    add('env', 'mountain_A_grass_trees', -34, -26, 4.5);
-    add('env', 'mountain_B_grass_trees', -22, -38, 4.2);
-    add('env', 'mountain_A_grass_trees', 6, -42, 4.6);
+    buildScenery(this.ground, assets, setting);
+    const style = ENV_STYLES[setting.terrain];
+    (this.scene.background as THREE.Color).set(style.sky);
+    this.hemi.color.set(style.hemi[0]);
+    this.hemi.groundColor.set(style.hemi[1]);
+    this.hemi.intensity = style.hemi[2];
+    this.sun.color.set(style.sun[0]);
+    this.sun.intensity = style.sun[1];
   }
 }
 
-const GROUND_CENTER_X = 15;
+export const CLASSIC_SETTING: BattleSetting = { terrain: 'plains', faction: 'undead', race: 'human' };
 
-/** Hand-painted ground texture: grass with a trampled battlefield leading to the plot. */
-function paintGround(size: number): THREE.Texture {
-  const px = 1024;
-  const c = document.createElement('canvas');
-  c.width = c.height = px;
-  const ctx = c.getContext('2d')!;
-  const toPx = (x: number, z: number) => [((x - GROUND_CENTER_X + size / 2) / size) * px, ((z + size / 2) / size) * px];
-  ctx.fillStyle = '#7cb85a';
-  ctx.fillRect(0, 0, px, px);
-  const rng = new Rng(7);
-  for (let k = 0; k < 2600; k++) {
-    const x = rng.next() * px;
-    const y = rng.next() * px;
-    const r = 2 + rng.next() * 9;
-    ctx.fillStyle = rng.chance(0.5) ? 'rgba(98,160,70,0.35)' : 'rgba(150,205,110,0.3)';
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Battlefield: trampled earth widening towards the graveyard.
-  const [ax, az] = toPx(TILE * 2.6, 0);
-  const [bx] = toPx(SPAWN_X + 10, 0);
-  const halfNear = (13 / size) * px;
-  const halfFar = (17 / size) * px;
-  for (let k = 0; k < 900; k++) {
-    const t = rng.next();
-    const x = ax + (bx - ax) * t;
-    const half = halfNear + (halfFar - halfNear) * t;
-    const y = az + (rng.next() * 2 - 1) * half * Math.sqrt(rng.next());
-    const r = 6 + rng.next() * 18;
-    ctx.fillStyle = `rgba(${170 + rng.int(30)},${135 + rng.int(25)},${85 + rng.int(20)},0.16)`;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Soft clearing around the plot.
-  const [ox, oz] = toPx(0, 0);
-  const g = ctx.createRadialGradient(ox, oz, 10, ox, oz, (16 / size) * px);
-  g.addColorStop(0, 'rgba(160,140,95,0.35)');
-  g.addColorStop(1, 'rgba(160,140,95,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(ox, oz, (16 / size) * px, 0, Math.PI * 2);
-  ctx.fill();
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+/** Frees the GPU resources owned by generated meshes (shared pack geometry is left alone). */
+function disposeTree(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh || !(m.geometry instanceof THREE.PlaneGeometry)) return;
+    m.geometry.dispose();
+    const mat = m.material as THREE.MeshStandardMaterial;
+    mat.map?.dispose();
+    mat.dispose();
+  });
 }
