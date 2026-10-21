@@ -1,3 +1,5 @@
+import { coinIcon } from './icons';
+
 type Child = Node | string | number | null | undefined | false;
 
 /** Tiny hyperscript helper used by all UI code. */
@@ -22,4 +24,4 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
-export const coin = () => h('span', { class: 'coin' });
+export const coin = () => coinIcon(16);

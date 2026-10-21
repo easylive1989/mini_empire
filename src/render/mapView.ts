@@ -356,7 +356,7 @@ export class MapView {
     // The map spans about 24 x 20 world units once tilted.
     const dH = (17 * h) / (availH * 2 * tan);
     const dW = (25 * h) / (availW * 2 * tan);
-    this.basePose.dist = Math.max(dH, dW) + 6;
+    this.basePose.dist = Math.max(dH, dW) * 0.9;
     const dx = insets.left + availW / 2 - w / 2;
     const dy = insets.top + availH / 2 - h / 2;
     this.camera.setViewOffset(w, h, -dx, -dy, w, h);
@@ -378,7 +378,7 @@ export class MapView {
     if (this.mode === 'orbit') {
       yaw = this.time * 0.05;
       pitch = THREE.MathUtils.degToRad(42);
-      dist = p.dist * 0.85;
+      dist = p.dist * 1.1;
     }
     if (this.fly < 1) {
       const k = ease(this.fly);

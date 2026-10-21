@@ -316,6 +316,19 @@ export class Battle {
     return this.schedule.length;
   }
 
+  /** Wave enemies still to beat, by unit id: alive or yet to arrive (summons excluded). */
+  remainingEnemies(): Map<string, number> {
+    const left = new Map<string, number>();
+    for (const e of this.entities) if (e.alive && e.baseTeam === 'enemy' && !e.summoned) left.set(e.def.id, (left.get(e.def.id) ?? 0) + 1);
+    for (const s of this.schedule) left.set(s.unit, (left.get(s.unit) ?? 0) + 1);
+    return left;
+  }
+
+  /** The wave's boss while it is on the field. */
+  get boss(): Entity | undefined {
+    return this.entities.find((e) => e.alive && e.def.boss && e.baseTeam === 'enemy');
+  }
+
   // ---------------------------------------------------------------- entity creation
 
   private createEntity(def: UnitDef, team: Team, x: number, z: number, opts: SpawnOpts = {}): Entity {
