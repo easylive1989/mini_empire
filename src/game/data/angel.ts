@@ -7,11 +7,11 @@ export const ANGEL: RaceDef = {
   color: '#facc15',
   castleName: '天穹聖殿',
   desc: '數量稀少但個體強大的神聖軍團。護盾是天使的一切：它保護生命，也轉化為攻擊力。',
-  strengths: ['士兵出場自帶 30% 護盾', '溢出的治療會轉為護盾', '單兵素質極高'],
+  strengths: ['士兵出場自帶 15% 護盾', '溢出的治療會轉為護盾', '單兵素質極高'],
   weaknesses: ['出兵速度 -20%', '兵力數量少，陣亡損失大'],
   passive: {
     name: '神聖庇護',
-    desc: '士兵出場時擁有 30% 最大生命的護盾；治療溢出的部分轉為護盾（最多 60% 最大生命）。出兵速度 -20%。',
+    desc: '士兵出場時擁有 15% 最大生命的護盾；治療溢出的部分轉為護盾（最多 60% 最大生命）。出兵速度 -20%。',
   },
   synergies: [
     {
@@ -35,7 +35,7 @@ export const ANGEL: RaceDef = {
       desc: '熾天使在空中施放範圍聖光，每 10 秒復活一名陣亡的天使。',
     },
   ],
-  mods: { spawnSpeedMult: 0.8, startShieldPct: 0.3, overhealShieldCap: 0.6 },
+  mods: { spawnSpeedMult: 0.8, startShieldPct: 0.15, overhealShieldCap: 0.6 },
 };
 
 export const ANGEL_UNITS: UnitDef[] = [

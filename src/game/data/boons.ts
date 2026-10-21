@@ -81,7 +81,7 @@ export const BOONS: BoonDef[] = [
     id: 'b_angel_light',
     race: 'angel',
     name: '神聖之光',
-    desc: '出場護盾提升至 45%，護盾上限提升至 80%。',
+    desc: '出場護盾提升至 30%，護盾上限提升至 80%。',
     apply: (m) => {
       m.startShieldPct += 0.15;
       m.overhealShieldCap += 0.2;
