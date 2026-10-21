@@ -25,6 +25,7 @@ import {
   canExpand,
   canUpgrade,
   canUpgradeCastle,
+  castleMaxHp,
   chooseBoon,
   continueEndless,
   demolish,
@@ -500,7 +501,7 @@ class App {
     this.sfx.play('victory');
     this.music.play('ending');
     this.ui.hideHud();
-    this.cui.showLiberated(c, id, s.stats.kills, () => {
+    this.cui.showLiberated(c, id, s.stats.kills, s.castleHp / castleMaxHp(s), () => {
       if (rec.capital) {
         this.endingRecord = rec;
         this.mapSelected = null;
@@ -549,6 +550,10 @@ class App {
     window.addEventListener('keydown', (e) => {
       if (this.mode === 'cutscene') {
         if (e.key === 'Escape') this.endCutscene();
+        return;
+      }
+      if (this.mode === 'title' && e.key === 'Enter' && this.campaign) {
+        this.continueCampaign();
         return;
       }
       if (!this.inLevel || !this.state) return;
