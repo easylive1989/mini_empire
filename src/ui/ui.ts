@@ -28,6 +28,7 @@ import {
   type GameState,
 } from '../game/state';
 import type { BuildingDef, RaceId, Stance, UnitDef } from '../game/types';
+import { RACE_MASCOT } from '../render/portraits';
 
 import { coin, h } from './dom';
 
@@ -122,6 +123,8 @@ export class Ui {
   private titleMode: 'campaign' | 'classic' = 'campaign';
   private speed = 1;
   audio: AudioState = { music: true, sfx: true };
+  /** Rendered portraits of each race's mascot unit for the race picker. */
+  portraits = new Map<RaceId, string>();
   private battleStatus: HTMLElement | null = null;
   private liveBox: HTMLElement | null = null;
 
@@ -220,7 +223,9 @@ export class Ui {
                 this.showTitle(rc.id);
               },
             },
-            h('div', { class: 'emblem' }),
+            this.portraits.get(rc.id)
+              ? h('div', { class: 'portrait' }, h('img', { src: this.portraits.get(rc.id), alt: getUnit(RACE_MASCOT[rc.id]).name, draggable: 'false' }))
+              : h('div', { class: 'emblem' }),
             h('div', { class: 'rname' }, rc.name),
             h('div', { class: 'rtitle' }, rc.title),
           ),

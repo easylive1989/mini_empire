@@ -44,6 +44,7 @@ import { BattleView } from './render/battleView';
 import { Cutscene } from './render/cutscene';
 import { Effects } from './render/effects';
 import { MapView } from './render/mapView';
+import { renderRacePortraits } from './render/portraits';
 import { TownView } from './render/town';
 import { CLASSIC_SETTING, World } from './render/world';
 import { CampaignUi } from './ui/campaignUi';
@@ -133,6 +134,7 @@ class App {
     this.battleView = new BattleView(this.world, this.assets, this.fx, this.town, { play: (n) => this.sfx.play(n) });
     this.map = new MapView(this.assets);
     this.cutscene = new Cutscene(this.assets, this.map);
+    this.ui.portraits = renderRacePortraits(this.assets);
     this.campaign = loadCampaign();
     this.bindInput();
     window.addEventListener('resize', () => this.onResize());
