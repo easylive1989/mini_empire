@@ -10,7 +10,6 @@ import type {
   WaveDef,
   Modifiers,
   ProjectileKind,
-  Stance,
   StatusId,
   Team,
   Trait,
@@ -161,14 +160,7 @@ const BUILDING_RADIUS = 1.7;
  * How far the formation may push (x offsets from the front edge of the plot), how far a soldier looks
  * for targets, and the furthest x (from the front edge) it will chase an enemy to.
  */
-export const STANCES: Record<
-  Stance,
-  { minPush: number; maxPush: number; acquire: number; leash: number; armorAdd: number; dmgMult: number; speedMult: number }
-> = {
-  hold: { minPush: 2, maxPush: 2, acquire: 10, leash: 11, armorAdd: 0.15, dmgMult: 1, speedMult: 1 },
-  advance: { minPush: 3, maxPush: 13, acquire: 12, leash: 19, armorAdd: 0, dmgMult: 1, speedMult: 1 },
-  assault: { minPush: 3, maxPush: SPAWN_X, acquire: 18, leash: 99, armorAdd: 0, dmgMult: 1.1, speedMult: 1.15 },
-};
+export const FORMATION = { minPush: 3, maxPush: 13, acquire: 12, leash: 19 };
 /** Soldiers that must gather at the line before the formation moves forward. */
 const MIN_GROUP = 4;
 const PUSH_SPEED = 1.8;
@@ -192,8 +184,7 @@ export class Battle {
   readonly rng: Rng;
   readonly wave: number;
   readonly waveDef: WaveDef;
-  readonly stance: Stance;
-  /** Current x of the formation's front line; moves with the stance and the balance of forces. */
+  /** Current x of the formation's front line; moves with the balance of forces. */
   pushLine: number;
   entities: Entity[] = [];
   buildings: BBuilding[] = [];
@@ -226,8 +217,7 @@ export class Battle {
     let maxI = 1;
     for (const t of state.tiles) if (t.owned) maxI = Math.max(maxI, t.i);
     this.frontX = maxI * TILE + TILE / 2;
-    this.stance = state.stance ?? 'advance';
-    this.pushLine = this.frontX + STANCES[this.stance].minPush;
+    this.pushLine = this.frontX + FORMATION.minPush;
     this.setupBuildings();
     this.setupSchedule();
   }
@@ -754,7 +744,8 @@ export class Battle {
     if (!this.result) {
       if (this.castle.destroyed) this.result = 'lose';
       else if (!this.schedule.length && !this.entities.some((e) => e.alive && e.baseTeam === 'enemy')) this.result = 'win';
-      if (this.time > 420 && !this.result) this.result = 'win';
+      // A wave that is still not repelled after 7 minutes counts as lost: stalling is not a defence.
+      if (this.time > 420 && !this.result) this.result = 'lose';
     } else {
       this.endTimer += dt;
     }
@@ -882,10 +873,9 @@ export class Battle {
       let armor = 0;
       let eva = 0;
       if (e.baseTeam === 'player') {
-        const st = STANCES[this.stance];
-        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus + this.bannerDmg) * st.dmgMult;
+        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus + this.bannerDmg);
         spd *= 1 + combined;
-        armor += m.unitArmorAdd + st.armorAdd;
+        armor += m.unitArmorAdd;
         eva += m.unitEvasionAdd;
       } else {
         eva += m.enemyEvasionAdd;
@@ -1130,7 +1120,7 @@ export class Battle {
     if (this.has(e, 'root') || this.has(e, 'stun')) return false;
     let speed =
       e.def.speed *
-      (e.baseTeam === 'player' ? this.mods.unitSpeedMult * STANCES[this.stance].speedMult * (1 + this.bannerSpeed) : this.mods.enemySpeedMult);
+      (e.baseTeam === 'player' ? this.mods.unitSpeedMult * (1 + this.bannerSpeed) : this.mods.enemySpeedMult);
     if (e.enraged) speed *= (e.def.traits?.find((t) => t.type === 'enrage') as { speedMult: number } | undefined)?.speedMult ?? 1;
     const sl = e.statuses.slow;
     if (sl && sl.t > 0) speed *= sl.v;
@@ -1223,13 +1213,8 @@ export class Battle {
    * the enemies ahead, the line marches forward; if the enemy clearly has the upper hand it falls back.
    */
   private updateFormation(dt: number): void {
-    const st = STANCES[this.stance];
-    const min = this.frontX + st.minPush;
-    const max = Math.min(this.frontX + st.maxPush, SPAWN_X - 2);
-    if (min >= max) {
-      this.pushLine = min;
-      return;
-    }
+    const min = this.frontX + FORMATION.minPush;
+    const max = Math.min(this.frontX + FORMATION.maxPush, SPAWN_X - 2);
     let ours = 0;
     let gathered = 0;
     let theirs = 0;
@@ -1273,16 +1258,15 @@ export class Battle {
   private chooseTarget(e: Entity, actsAsPlayer: boolean): void {
     const siege = e.def.traits?.some((t) => t.type === 'siege');
     if (actsAsPlayer) {
-      const st = STANCES[this.stance];
       const aggressive = e.def.ai === 'aggressive';
       const acquire =
         e.def.ai === 'engineer'
           ? 4
           : e.def.ai === 'support'
             ? Math.max(this.rangeOf(e) + 1, 7)
-            : Math.max(st.acquire + (aggressive ? AGGRESSIVE_BONUS : 0), this.rangeOf(e) + 1.5);
-      // Never chase past the stance's leash (keeps "hold" armies under tower cover).
-      const maxX = this.frontX + st.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + this.rangeOf(e);
+            : Math.max(FORMATION.acquire + (aggressive ? AGGRESSIVE_BONUS : 0), this.rangeOf(e) + 1.5);
+      // Never chase past the formation's leash.
+      const maxX = this.frontX + FORMATION.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + this.rangeOf(e);
       const cur = this.getEntity(e.targetId);
       const foe = this.nearestFoe(e, acquire, maxX);
       // Stick to the current target unless something is much closer.

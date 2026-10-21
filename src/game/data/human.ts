@@ -217,7 +217,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '訓練民兵。',
     model: { pack: 'buildings', key: 'home_A' },
     unit: 'human_militia',
-    spawnInterval: [4.5, 3.6, 2.9],
+    spawnInterval: [5.4, 3.6, 2.9],
     maxAlive: [3, 4, 5],
   },
   {
@@ -231,7 +231,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '訓練長槍兵。',
     model: { pack: 'buildings', key: 'barracks' },
     unit: 'human_pikeman',
-    spawnInterval: [5, 4, 3.2],
+    spawnInterval: [6, 4, 3.2],
     maxAlive: [3, 4, 5],
   },
   {
@@ -245,7 +245,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '訓練十字弓手。',
     model: { pack: 'buildings', key: 'archeryrange' },
     unit: 'human_archer',
-    spawnInterval: [5, 4, 3.2],
+    spawnInterval: [6, 4, 3.2],
     maxAlive: [3, 4, 5],
   },
   {
@@ -259,7 +259,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '培育牧師。',
     model: { pack: 'buildings', key: 'church' },
     unit: 'human_priest',
-    spawnInterval: [7, 5.6, 4.5],
+    spawnInterval: [8.4, 5.6, 4.5],
     maxAlive: [2, 3, 4],
   },
   {
@@ -273,7 +273,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '訓練騎士。',
     model: { pack: 'buildings', key: 'tavern' },
     unit: 'human_knight',
-    spawnInterval: [8, 6.4, 5.2],
+    spawnInterval: [9.6, 6.4, 5.2],
     maxAlive: [2, 3, 4],
   },
   {
@@ -287,7 +287,7 @@ export const HUMAN_BUILDINGS: BuildingDef[] = [
     desc: '召喚王國勇者。',
     model: { pack: 'buildings', key: 'castle', scale: 0.7 },
     unit: 'human_champion',
-    spawnInterval: [16, 13, 10],
+    spawnInterval: [19.2, 13, 10],
     maxAlive: [1, 1, 2],
   },
 ];

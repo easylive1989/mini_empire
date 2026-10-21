@@ -30,10 +30,10 @@ export const CASTLE = {
 /** Upgrade cost multipliers (of base cost) to reach level 2 and 3. */
 export const UPGRADE_COST_MULT = [0, 0.9, 1.7];
 /** Unit stat multiplier by the level of the barracks that spawned it. */
-export const UNIT_LEVEL_MULT = [1, 1.2, 1.45];
+export const UNIT_LEVEL_MULT = [1, 1.35, 1.75];
 export const BUILDING_LEVEL_HP_MULT = [1, 1.3, 1.65];
 
-export const ADJACENT_BARRACKS_SPAWN_BONUS = 0.15;
+export const ADJACENT_BARRACKS_SPAWN_BONUS = 0.1;
 export const ADJACENT_RESOURCE_INCOME_BONUS = 0.1;
 export const ADJACENT_TOWER_DMG_BONUS = 0.1;
 

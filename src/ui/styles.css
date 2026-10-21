@@ -1219,56 +1219,9 @@ hr {
   pointer-events: auto;
 }
 
-.stance-box {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid var(--brass-line);
-  background: var(--panel);
-}
-
-.stance-box .eyebrow {
-  text-align: center;
-  font-size: 11px;
-}
-
-.stance-opts {
-  display: flex;
-  gap: 4px;
-}
-
-.stance-opts button {
-  width: 88px;
-  height: 48px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-2);
-}
-
-.stance-opts button b {
-  font-size: 14px;
-}
-
-.stance-opts button small {
-  font-size: 11px;
-  opacity: 0.8;
-}
-
-.stance-opts button.on {
-  border-color: var(--gold);
-  background: rgba(226, 179, 74, 0.2);
-  color: var(--gold-hi);
-}
-
 .start-btn {
   min-width: 250px;
+  min-height: 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1314,24 +1267,6 @@ hr {
   border-radius: 12px;
   border: 1px solid var(--brass-line);
   background: var(--panel);
-}
-
-.stance-now {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.stance-now .ico {
-  color: var(--gold);
-}
-
-.speed-bar .divider {
-  width: 1px;
-  height: 28px;
-  background: rgba(201, 163, 92, 0.3);
 }
 
 .speed-opts {

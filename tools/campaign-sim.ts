@@ -1,8 +1,9 @@
 // Campaign balance check: the bot liberates the map with two strategies and
 // reports how close each territory battle was.
-// Usage: npm run campaign-sim   (env RACE=elf to filter, STRAT=straight|full)
+// Usage: npm run campaign-sim   (env RACE=elf to filter, STRAT=straight|full|lazy)
+// `lazy` takes the straight road with level-1 starter barracks only and should fail by tier 2-3.
 import { simulateBattle } from '../src/game/battle';
-import { botPrepare } from '../src/game/bot';
+import { botPrepare, lazyPrepare } from '../src/game/bot';
 import { createLevelState, isAttackable, newCampaign, recordBattle, type CampaignState } from '../src/game/campaign/campaign';
 import { CAPITAL_TERRITORY, TERRITORIES, territoryTier } from '../src/game/campaign/territories';
 import { RACES } from '../src/game/data/index';
@@ -12,13 +13,15 @@ import { applyBattleOutcome } from '../src/game/state';
 const base = DIFFICULTY.base;
 
 /** Plays a whole territory battle with the bot; returns whether it was won. */
-function playLevel(c: CampaignState, id: string, seed: number, mult = 1): { won: boolean; kills: number } {
+type Strategy = 'straight' | 'full' | 'lazy';
+
+function playLevel(c: CampaignState, id: string, seed: number, mult = 1, prepare = botPrepare): { won: boolean; kills: number } {
   DIFFICULTY.base = base * mult;
   const s = createLevelState(c, id, seed);
   const plan = { n: 0 };
   let kills = 0;
   while (s.phase === 'prep') {
-    botPrepare(s, plan);
+    prepare(s, plan);
     s.phase = 'battle';
     const b = simulateBattle(s);
     kills += b.kills;
@@ -29,14 +32,14 @@ function playLevel(c: CampaignState, id: string, seed: number, mult = 1): { won:
 }
 
 /** Largest enemy-strength multiplier the bot still beats this territory with. */
-function margin(c: CampaignState, id: string): number {
+function margin(c: CampaignState, id: string, prepare = botPrepare): number {
   let lo = 0.3;
   let hi = 4;
-  if (!playLevel(c, id, 11, lo).won) return 0;
-  if (playLevel(c, id, 11, hi).won) return hi;
+  if (!playLevel(c, id, 11, lo, prepare).won) return 0;
+  if (playLevel(c, id, 11, hi, prepare).won) return hi;
   for (let k = 0; k < 6; k++) {
     const mid = Math.sqrt(lo * hi);
-    if (playLevel(c, id, 11, mid).won) lo = mid;
+    if (playLevel(c, id, 11, mid, prepare).won) lo = mid;
     else hi = mid;
   }
   return lo;
@@ -44,21 +47,22 @@ function margin(c: CampaignState, id: string): number {
 
 const STRAIGHT = ['t_wheat', 't_ravenhold', 't_royalcamp', CAPITAL_TERRITORY.id];
 
-function run(race: (typeof RACES)[number]['id'], strategy: 'straight' | 'full'): string {
+function run(race: (typeof RACES)[number]['id'], strategy: Strategy): string {
+  const prepare = strategy === 'lazy' ? lazyPrepare : botPrepare;
   const c = newCampaign(race);
   const out: string[] = [];
   const order =
-    strategy === 'straight'
+    strategy !== 'full'
       ? STRAIGHT
       : [...TERRITORIES.filter((t) => !t.start && !t.capital).sort((a, b) => territoryTier(a) - territoryTier(b)).map((t) => t.id), CAPITAL_TERRITORY.id];
   for (const id of order) {
     if (!isAttackable(c, id)) continue;
-    const m = margin(c, id);
+    const m = margin(c, id, prepare);
     let tries = 0;
-    let res = playLevel(c, id, 1);
+    let res = playLevel(c, id, 1, 1, prepare);
     while (!res.won && tries < 3) {
       tries++;
-      res = playLevel(c, id, 1 + tries);
+      res = playLevel(c, id, 1 + tries, 1, prepare);
     }
     recordBattle(c, id, res.won, res.kills);
     const t = TERRITORIES.find((x) => x.id === id)!;
@@ -69,7 +73,7 @@ function run(race: (typeof RACES)[number]['id'], strategy: 'straight' | 'full'):
 }
 
 const only = process.env.RACE;
-const strategies = (process.env.STRAT ?? 'straight,full').split(',') as ('straight' | 'full')[];
+const strategies = (process.env.STRAT ?? 'straight,full,lazy').split(',') as Strategy[];
 for (const r of RACES.filter((x) => !only || x.id === only)) {
   for (const strat of strategies) console.log(`${r.name} ${strat.padEnd(8)} ${run(r.id, strat)}`);
 }

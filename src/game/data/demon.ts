@@ -237,7 +237,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '孵化小鬼。',
     model: { pack: 'halloween', key: 'crypt', scale: 1.0 },
     unit: 'demon_imp',
-    spawnInterval: [3.4, 2.8, 2.3],
+    spawnInterval: [4.1, 2.8, 2.3],
     maxAlive: [3, 4, 5],
   },
   {
@@ -251,7 +251,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '訓練狂魔戰士。',
     model: { pack: 'buildings', key: 'barracks' },
     unit: 'demon_berserker',
-    spawnInterval: [5, 4, 3.2],
+    spawnInterval: [6, 4, 3.2],
     maxAlive: [3, 4, 5],
   },
   {
@@ -265,7 +265,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '培育術士。',
     model: { pack: 'buildings', key: 'tower_base', scale: 0.85 },
     unit: 'demon_warlock',
-    spawnInterval: [5.5, 4.4, 3.5],
+    spawnInterval: [6.6, 4.4, 3.5],
     maxAlive: [2, 3, 4],
   },
   {
@@ -279,7 +279,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '召喚魅魔。',
     model: { pack: 'buildings', key: 'tavern' },
     unit: 'demon_succubus',
-    spawnInterval: [7, 5.6, 4.5],
+    spawnInterval: [8.4, 5.6, 4.5],
     maxAlive: [2, 2, 3],
   },
   {
@@ -293,7 +293,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '培育獻祭祭司。',
     model: { pack: 'halloween', key: 'shrine', scale: 1.2 },
     unit: 'demon_cultist',
-    spawnInterval: [8, 6.4, 5.2],
+    spawnInterval: [9.6, 6.4, 5.2],
     maxAlive: [1, 2, 2],
   },
   {
@@ -307,7 +307,7 @@ export const DEMON_BUILDINGS: BuildingDef[] = [
     desc: '召喚深淵領主。',
     model: { pack: 'halloween', key: 'arch_gate', scale: 1.1 },
     unit: 'demon_pitlord',
-    spawnInterval: [16, 13, 10],
+    spawnInterval: [19.2, 13, 10],
     maxAlive: [1, 1, 2],
   },
 ];

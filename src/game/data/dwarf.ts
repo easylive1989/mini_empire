@@ -273,7 +273,7 @@ export const DWARF_BUILDINGS: BuildingDef[] = [
     desc: '訓練盾衛。',
     model: { pack: 'buildings', key: 'barracks' },
     unit: 'dwarf_shieldguard',
-    spawnInterval: [5, 4, 3.2],
+    spawnInterval: [6, 4, 3.2],
     maxAlive: [3, 4, 5],
   },
   {
@@ -287,7 +287,7 @@ export const DWARF_BUILDINGS: BuildingDef[] = [
     desc: '訓練重弩手。',
     model: { pack: 'buildings', key: 'archeryrange' },
     unit: 'dwarf_musketeer',
-    spawnInterval: [5.5, 4.4, 3.5],
+    spawnInterval: [6.6, 4.4, 3.5],
     maxAlive: [2, 3, 4],
   },
   {
@@ -301,7 +301,7 @@ export const DWARF_BUILDINGS: BuildingDef[] = [
     desc: '培訓工程師。',
     model: { pack: 'buildings', key: 'watermill' },
     unit: 'dwarf_engineer',
-    spawnInterval: [6, 5, 4],
+    spawnInterval: [7.2, 5, 4],
     maxAlive: [1, 2, 2],
   },
   {
@@ -315,7 +315,7 @@ export const DWARF_BUILDINGS: BuildingDef[] = [
     desc: '培育符文祭司。',
     model: { pack: 'buildings', key: 'church' },
     unit: 'dwarf_runepriest',
-    spawnInterval: [7, 5.6, 4.5],
+    spawnInterval: [8.4, 5.6, 4.5],
     maxAlive: [2, 3, 3],
   },
   {
@@ -329,7 +329,7 @@ export const DWARF_BUILDINGS: BuildingDef[] = [
     desc: '組裝蒸汽魔像。',
     model: { pack: 'buildings', key: 'lumbermill', scale: 1.1 },
     unit: 'dwarf_golem',
-    spawnInterval: [16, 13, 10],
+    spawnInterval: [19.2, 13, 10],
     maxAlive: [1, 1, 2],
   },
 ];

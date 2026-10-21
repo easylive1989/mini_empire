@@ -49,7 +49,7 @@ export const SPECIAL_BUILDINGS: BuildingDef[] = [
     desc: '招募傭兵神射手。（收復「商隊驛站」解鎖・每場限 1 座）',
     model: { pack: 'buildings', key: 'tavern' },
     unit: 'sp_marksman',
-    spawnInterval: [6, 5, 4],
+    spawnInterval: [7.2, 5, 4],
     maxAlive: [2, 3, 3],
   },
   {
@@ -64,7 +64,7 @@ export const SPECIAL_BUILDINGS: BuildingDef[] = [
     desc: '招募獸人傭兵。（收復「獸人鬥技場」解鎖・每場限 1 座）',
     model: { pack: 'env', key: 'building_stage_A', scale: 1.1 },
     unit: 'sp_orcmerc',
-    spawnInterval: [9, 7.5, 6],
+    spawnInterval: [10.8, 7.5, 6],
     maxAlive: [2, 2, 3],
   },
   {

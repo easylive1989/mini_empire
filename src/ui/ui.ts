@@ -31,16 +31,11 @@ import {
   tileBonuses,
   type GameState,
 } from '../game/state';
-import type { BuildingDef, BuildingKind, RaceId, Stance, UnitDef } from '../game/types';
+import type { BuildingDef, BuildingKind, RaceId, UnitDef } from '../game/types';
 import { RACE_MASCOT } from '../render/portraits';
 import { coin, h } from './dom';
 import { coinIcon, crest, icon, type IconName } from './icons';
 
-export const STANCE_INFO: Record<Stance, { icon: IconName; name: string; hint: string; desc: string }> = {
-  hold: { icon: 'shield', name: '堅守', hint: '護甲 +15%', desc: '士兵留在防禦塔射程內，不追擊遠方的敵人；護甲 +15%。適合依賴防禦塔的陣容。' },
-  advance: { icon: 'swords', name: '迎擊', hint: '推進中場', desc: '士兵集結成隊後推進到中場迎敵，兵力不利時退回前線。' },
-  assault: { icon: 'fire', name: '突擊', hint: '傷害 +10%', desc: '全軍壓上直攻敵營、搶先打掉後排敵人；傷害 +10%、移速 +15%，但會脫離防禦塔掩護。' },
-};
 const KIND_LABEL: Record<Exclude<BuildingKind, 'castle'>, string> = { resource: '資源', tower: '防禦塔', support: '支援', barracks: '兵營' };
 
 type BuildTab = 'all' | 'resource' | 'tower' | 'barracks' | 'special';
@@ -68,7 +63,6 @@ export interface UiActions {
   repairCastle(): void;
   startWave(): void;
   setSpeed(speed: number): void;
-  setStance(stance: Stance): void;
   chooseBoon(id: string): void;
   backToTitle(): void;
   continueEndless(): void;
@@ -501,13 +495,10 @@ export class Ui {
 
   private renderBottom(state: GameState, battle: Battle | null): void {
     if (battle) {
-      const st = STANCE_INFO[state.stance];
       this.bottom.replaceChildren(
         h(
           'div',
           { class: 'speed-bar' },
-          h('span', { class: 'stance-now', title: st.desc }, icon(st.icon, 16, { strokeWidth: 2 }), `姿態：${st.name}`),
-          h('span', { class: 'divider' }),
           h(
             'div',
             { class: 'speed-opts', role: 'radiogroup', 'aria-label': '戰鬥速度' },
@@ -534,34 +525,6 @@ export class Ui {
     } else if (state.phase === 'prep') {
       const w = waveForState(state);
       this.bottom.replaceChildren(
-        h(
-          'div',
-          { class: 'stance-box', role: 'radiogroup', 'aria-label': '作戰姿態' },
-          h('div', { class: 'eyebrow' }, '作戰姿態'),
-          h(
-            'div',
-            { class: 'stance-opts' },
-            (Object.keys(STANCE_INFO) as Stance[]).map((s) =>
-              this.tip(
-                h(
-                  'button',
-                  {
-                    class: s === state.stance ? 'on' : '',
-                    role: 'radio',
-                    'aria-checked': String(s === state.stance),
-                    onclick: () => {
-                      this.actions.setStance(s);
-                      this.renderBottom(state, null);
-                    },
-                  },
-                  h('b', {}, STANCE_INFO[s].name),
-                  h('small', {}, STANCE_INFO[s].hint),
-                ),
-                () => `<b>${STANCE_INFO[s].name}</b><br>${STANCE_INFO[s].desc}`,
-              ),
-            ),
-          ),
-        ),
         h(
           'button',
           { class: 'start-btn', onclick: () => this.actions.startWave() },
@@ -1160,7 +1123,7 @@ export class Ui {
           line('castle', '中央是你的主堡。點選空地建造建築，點選建築可以升級或拆除。'),
           line('coin', '金幣在每波結束時結算：主堡稅收＋資源建築產出＋擊殺獎勵。'),
           line('army', '兵營會在戰鬥中自動出兵，上限與速度隨等級提升；每波結束後士兵會解散。'),
-          line('flag', '開戰前選擇作戰姿態：堅守（留在塔的射程內）、迎擊（集結後推進到中場）、突擊（全軍壓上）。'),
+          line('flag', '士兵會集結成隊推進到中場迎敵，兵力不利時退回前線。'),
           line('tower', '防禦塔自動攻擊射程內的敵人。注意有些兵種與塔無法攻擊飛行單位！'),
           line('sparkle', '相鄰加成：兵營相鄰兵營出兵更快，資源相鄰資源產量更高，塔相鄰塔傷害更高。'),
           line('shield', '敵人永遠從右下方來襲，最靠近前線的建築會先被攻擊。被摧毀的建築戰後自動修復，主堡的損傷會保留。'),
@@ -1168,7 +1131,7 @@ export class Ui {
             ? line('map', '擊退全部敵軍（最後一波是首領）就能收復領地。收復的領地會給予永久加成或特殊建築，地形則會影響這場戰鬥。')
             : line('star', '撐過 30 波（第 10、20、30 波有首領）即可獲勝，每 5 波可以選一項祝福。'),
         ),
-        h('p', { class: 'muted small' }, '快捷鍵：空白鍵開始下一波・1/2/3 切換速度・Q/W/E 切換作戰姿態・U 升級・Esc 取消選取'),
+        h('p', { class: 'muted small' }, '快捷鍵：空白鍵開始下一波・1/2/3 切換速度・U 升級・Esc 取消選取'),
         h('div', { class: 'modal-actions' }, h('button', { class: 'btn primary', onclick: () => this.closeOverlay() }, '知道了')),
       ),
     );

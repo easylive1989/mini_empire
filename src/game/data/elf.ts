@@ -235,7 +235,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '訓練森林哨兵。',
     model: { pack: 'buildings', key: 'home_B' },
     unit: 'elf_sentinel',
-    spawnInterval: [4.5, 3.6, 2.9],
+    spawnInterval: [5.4, 3.6, 2.9],
     maxAlive: [3, 4, 5],
   },
   {
@@ -249,7 +249,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '訓練精靈弓手。',
     model: { pack: 'buildings', key: 'archeryrange' },
     unit: 'elf_archer',
-    spawnInterval: [4.8, 3.8, 3.1],
+    spawnInterval: [5.8, 3.8, 3.1],
     maxAlive: [3, 4, 5],
   },
   {
@@ -263,7 +263,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '培育德魯伊。',
     model: { pack: 'buildings', key: 'lumbermill' },
     unit: 'elf_druid',
-    spawnInterval: [6, 4.8, 3.9],
+    spawnInterval: [7.2, 4.8, 3.9],
     maxAlive: [2, 3, 4],
   },
   {
@@ -277,7 +277,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '訓練風行者。',
     model: { pack: 'buildings', key: 'windmill' },
     unit: 'elf_windrunner',
-    spawnInterval: [6.5, 5.2, 4.2],
+    spawnInterval: [7.8, 5.2, 4.2],
     maxAlive: [2, 3, 4],
   },
   {
@@ -291,7 +291,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '培育月之女祭司。',
     model: { pack: 'buildings', key: 'church' },
     unit: 'elf_priestess',
-    spawnInterval: [8, 6.4, 5.2],
+    spawnInterval: [9.6, 6.4, 5.2],
     maxAlive: [1, 2, 3],
   },
   {
@@ -305,7 +305,7 @@ export const ELF_BUILDINGS: BuildingDef[] = [
     desc: '喚醒古樹守衛。',
     model: { pack: 'env', key: 'trees_A_medium', scale: 1.2 },
     unit: 'elf_treant',
-    spawnInterval: [16, 13, 10],
+    spawnInterval: [19.2, 13, 10],
     maxAlive: [1, 1, 2],
   },
 ];

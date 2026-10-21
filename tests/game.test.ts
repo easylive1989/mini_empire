@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { Battle, simulateBattle, STANCES } from '../src/game/battle';
-import { CASTLE, FINAL_WAVE, START_GOLD } from '../src/game/constants';
+import { Battle, FORMATION, simulateBattle } from '../src/game/battle';
+import { ADJACENT_BARRACKS_SPAWN_BONUS, CASTLE, FINAL_WAVE, START_GOLD } from '../src/game/constants';
 import { BUILDINGS, getUnit, RACES, raceBuildings, UNITS } from '../src/game/data/index';
 import { getWave } from '../src/game/data/waves';
 import {
@@ -14,7 +14,6 @@ import {
   demolish,
   expand,
   newGame,
-  setStance,
   tileAt,
   tileBonuses,
   upgrade,
@@ -80,7 +79,7 @@ describe('game state', () => {
     upgradeCastle(s);
     build(s, 1, 1, 'human_b_militia');
     build(s, 1, 0, 'human_b_pikeman');
-    expect(tileBonuses(s, 1, 1).spawnMult).toBeCloseTo(1.15);
+    expect(tileBonuses(s, 1, 1).spawnMult).toBeCloseTo(1 + ADJACENT_BARRACKS_SPAWN_BONUS);
     build(s, -1, 0, 'human_market');
     build(s, -1, 1, 'gold_mine');
     // market: base 24 + 8 per neighbour (castle + mine) = 40, +10% adjacent resource, human +10%
@@ -180,9 +179,8 @@ describe('data integrity', () => {
 });
 
 /** Puts two fresh entities face to face for synergy checks. */
-function arena(race: Parameters<typeof newGame>[0], stance: 'hold' | 'advance' | 'assault' = 'advance') {
+function arena(race: Parameters<typeof newGame>[0]) {
   const s = newGame(race, 3);
-  s.stance = stance;
   s.phase = 'battle';
   const b = new Battle(s);
   (b as unknown as { schedule: unknown[] }).schedule = [];
@@ -279,54 +277,34 @@ describe('battle', () => {
   });
 });
 
-describe('army stance', () => {
+describe('battle timeout', () => {
+  it('a wave that is still alive after 7 minutes counts as lost', () => {
+    const b = arena('human');
+    const ghost = spawn(b, 'm_minion', 'enemy', 32);
+    ghost.def = { ...ghost.def, speed: 0 };
+    run(b, 425);
+    expect(b.castle.destroyed).toBe(false);
+    expect(b.result).toBe('lose');
+  });
+});
+
+describe('army formation', () => {
   // 3x3 plot: the front edge of the plot is at x = 6.
   const FRONT = 6;
 
-  it('defaults to advance and can only change before a wave', () => {
-    const s = newGame('human', 1);
-    expect(s.stance).toBe('advance');
-    expect(setStance(s, 'hold')).toBe(true);
-    s.phase = 'battle';
-    expect(setStance(s, 'assault')).toBe(false);
-    expect(s.stance).toBe('hold');
-  });
-
-  it('holding soldiers stay under tower cover instead of chasing far enemies', () => {
-    const hold = arena('human', 'hold');
-    const m1 = spawn(hold, 'human_militia', 'player', FRONT + 2);
-    const far1 = spawn(hold, 'm_minion', 'enemy', FRONT + 18);
-    far1.def = { ...far1.def, speed: 0 };
-    run(hold, 2);
-    expect(m1.targetId).toBeNull();
-    expect(m1.x).toBeLessThan(FRONT + 4);
-
-    const assault = arena('human', 'assault');
-    const m2 = spawn(assault, 'human_militia', 'player', FRONT + 2);
-    const far2 = spawn(assault, 'm_minion', 'enemy', FRONT + 18);
-    far2.def = { ...far2.def, speed: 0 };
-    run(assault, 2);
-    expect(m2.targetId).toBe(far2.id);
-    expect(m2.x).toBeGreaterThan(FRONT + 6);
-  });
-
-  it('a gathered army pushes the line forward up to the stance limit', () => {
-    const b = arena('human', 'advance');
+  it('a gathered army pushes the line forward up to the midfield limit', () => {
+    const b = arena('human');
     const start = b.pushLine;
+    expect(start).toBeCloseTo(FRONT + FORMATION.minPush);
     for (let k = 0; k < 5; k++) spawn(b, 'human_militia', 'player', start, k - 2);
     run(b, 3);
     expect(b.pushLine).toBeGreaterThan(start + 3);
     run(b, 20);
-    expect(b.pushLine).toBeCloseTo(FRONT + STANCES.advance.maxPush);
-
-    const held = arena('human', 'hold');
-    for (let k = 0; k < 5; k++) spawn(held, 'human_militia', 'player', held.pushLine, k - 2);
-    run(held, 5);
-    expect(held.pushLine).toBeCloseTo(FRONT + STANCES.hold.minPush);
+    expect(b.pushLine).toBeCloseTo(FRONT + FORMATION.maxPush);
   });
 
   it('falls back when the enemy ahead is much stronger', () => {
-    const b = arena('human', 'advance');
+    const b = arena('human');
     b.pushLine = FRONT + 12;
     spawn(b, 'human_militia', 'player', FRONT + 12);
     for (let k = 0; k < 4; k++) {
@@ -337,13 +315,8 @@ describe('army stance', () => {
     expect(b.pushLine).toBeLessThan(FRONT + 8);
   });
 
-  it('applies stance modifiers and lets charging units lead the formation', () => {
-    const hold = arena('dwarf', 'hold');
-    const guard = spawn(hold, 'dwarf_shieldguard', 'player', FRONT + 2);
-    run(hold, 0.1);
-    expect(guard.armorAdd).toBeCloseTo(hold.mods.unitArmorAdd + STANCES.hold.armorAdd);
-
-    const b = arena('human', 'advance');
+  it('lets charging units lead the formation and keeps ranged units behind', () => {
+    const b = arena('human');
     const knight = spawn(b, 'human_knight', 'player', FRONT);
     const militia = spawn(b, 'human_militia', 'player', FRONT);
     expect(b.rallyX(knight)).toBeGreaterThan(b.rallyX(militia));

@@ -226,7 +226,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨守衛天使。',
     model: { pack: 'buildings', key: 'barracks' },
     unit: 'angel_guardian',
-    spawnInterval: [5.5, 4.4, 3.5],
+    spawnInterval: [6.6, 4.4, 3.5],
     maxAlive: [3, 4, 4],
   },
   {
@@ -240,7 +240,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨光之射手。',
     model: { pack: 'buildings', key: 'archeryrange' },
     unit: 'angel_archer',
-    spawnInterval: [5.5, 4.4, 3.5],
+    spawnInterval: [6.6, 4.4, 3.5],
     maxAlive: [3, 3, 4],
   },
   {
@@ -254,7 +254,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨治癒天使。',
     model: { pack: 'buildings', key: 'well', scale: 0.9 },
     unit: 'angel_healer',
-    spawnInterval: [7, 5.6, 4.5],
+    spawnInterval: [8.4, 5.6, 4.5],
     maxAlive: [2, 2, 3],
   },
   {
@@ -268,7 +268,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨聖盾修女。',
     model: { pack: 'buildings', key: 'church' },
     unit: 'angel_aegis',
-    spawnInterval: [8, 6.4, 5.2],
+    spawnInterval: [9.6, 6.4, 5.2],
     maxAlive: [1, 2, 3],
   },
   {
@@ -282,7 +282,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨審判者。',
     model: { pack: 'buildings', key: 'tavern' },
     unit: 'angel_judicator',
-    spawnInterval: [9, 7.2, 5.8],
+    spawnInterval: [10.8, 7.2, 5.8],
     maxAlive: [2, 2, 3],
   },
   {
@@ -296,7 +296,7 @@ export const ANGEL_BUILDINGS: BuildingDef[] = [
     desc: '降臨熾天使。',
     model: { pack: 'buildings', key: 'tower_B', scale: 1.0 },
     unit: 'angel_seraph',
-    spawnInterval: [18, 14, 11],
+    spawnInterval: [21.6, 14, 11],
     maxAlive: [1, 1, 2],
   },
 ];
