@@ -5,7 +5,7 @@ export const GRID_RADIUS = 2;
 export const START_RADIUS = 1;
 
 /** Enemies always march in from +X (bottom-right of the screen). */
-export const SPAWN_X = 40;
+export const SPAWN_X = 34;
 export const SPAWN_Z_SPREAD = 9;
 
 export const FINAL_WAVE = 30;
