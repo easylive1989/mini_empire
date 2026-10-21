@@ -9,6 +9,7 @@ import type {
   WaveDef,
   Modifiers,
   ProjectileKind,
+  Stance,
   StatusId,
   Team,
   Trait,
@@ -149,8 +150,25 @@ interface SpawnEntry {
 }
 
 const RETARGET = 0.3;
-const PLAYER_ACQUIRE = 13;
 const BUILDING_RADIUS = 1.7;
+
+/**
+ * How far the formation may push (x offsets from the front edge of the plot), how far a soldier looks
+ * for targets, and the furthest x (from the front edge) it will chase an enemy to.
+ */
+export const STANCES: Record<
+  Stance,
+  { minPush: number; maxPush: number; acquire: number; leash: number; armorAdd: number; dmgMult: number; speedMult: number }
+> = {
+  hold: { minPush: 2, maxPush: 2, acquire: 10, leash: 11, armorAdd: 0.15, dmgMult: 1, speedMult: 1 },
+  advance: { minPush: 3, maxPush: 13, acquire: 12, leash: 19, armorAdd: 0, dmgMult: 1, speedMult: 1 },
+  assault: { minPush: 3, maxPush: SPAWN_X, acquire: 18, leash: 99, armorAdd: 0, dmgMult: 1.1, speedMult: 1.15 },
+};
+/** Soldiers that must gather at the line before the formation moves forward. */
+const MIN_GROUP = 4;
+const PUSH_SPEED = 1.8;
+const RETREAT_SPEED = 3;
+const AGGRESSIVE_BONUS = 5;
 
 function dist2(ax: number, az: number, bx: number, bz: number): number {
   const dx = ax - bx;
@@ -164,6 +182,9 @@ export class Battle {
   readonly rng: Rng;
   readonly wave: number;
   readonly waveDef: WaveDef;
+  readonly stance: Stance;
+  /** Current x of the formation's front line; moves with the stance and the balance of forces. */
+  pushLine: number;
   entities: Entity[] = [];
   buildings: BBuilding[] = [];
   projectiles: Projectile[] = [];
@@ -191,6 +212,8 @@ export class Battle {
     let maxI = 1;
     for (const t of state.tiles) if (t.owned) maxI = Math.max(maxI, t.i);
     this.frontX = maxI * TILE + TILE / 2;
+    this.stance = state.stance ?? 'advance';
+    this.pushLine = this.frontX + STANCES[this.stance].minPush;
     this.setupBuildings();
     this.setupSchedule();
   }
@@ -382,12 +405,12 @@ export class Battle {
     return t.alive && t.team !== a.team && (!t.flying || a.canHitAir);
   }
 
-  private nearestFoe(e: Entity, maxRange: number): Entity | undefined {
+  private nearestFoe(e: Entity, maxRange: number, maxX = Infinity): Entity | undefined {
     let best: Entity | undefined;
     let bestD = maxRange * maxRange;
     const canHitAir = !!e.def.canHitAir;
     for (const o of this.entities) {
-      if (!this.canTarget({ team: e.team, canHitAir }, o)) continue;
+      if (!this.canTarget({ team: e.team, canHitAir }, o) || o.x > maxX) continue;
       const d = dist2(e.x, e.z, o.x, o.z);
       if (d < bestD) {
         bestD = d;
@@ -679,6 +702,7 @@ export class Battle {
     }
 
     this.updateBarracks(dt);
+    this.updateFormation(dt);
     this.updateStatuses(dt);
     this.updateDerived();
     for (const e of this.entities) if (e.alive) this.updateTraits(e, dt);
@@ -786,9 +810,10 @@ export class Battle {
       let armor = 0;
       let eva = 0;
       if (e.baseTeam === 'player') {
-        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus);
+        const st = STANCES[this.stance];
+        dmg *= m.unitDmgMult * (1 + combined + this.soulBonus) * st.dmgMult;
         spd *= 1 + combined;
-        armor += m.unitArmorAdd;
+        armor += m.unitArmorAdd + st.armorAdd;
         eva += m.unitEvasionAdd;
       }
       for (const tr of e.def.traits ?? []) {
@@ -1015,7 +1040,7 @@ export class Battle {
     const d = Math.hypot(dx, dz);
     if (d <= stopDist) return false;
     if (this.has(e, 'root') || this.has(e, 'stun')) return false;
-    let speed = e.def.speed * (e.baseTeam === 'player' ? this.mods.unitSpeedMult : 1);
+    let speed = e.def.speed * (e.baseTeam === 'player' ? this.mods.unitSpeedMult * STANCES[this.stance].speedMult : 1);
     const sl = e.statuses.slow;
     if (sl && sl.t > 0) speed *= sl.v;
     if (this.has(e, 'rune')) speed *= 0.75;
@@ -1085,18 +1110,51 @@ export class Battle {
       }
       return;
     }
-    // No target: player units hold the rally line, enemies march on.
+    // No target: player units form up on the push line, enemies march on.
     if (actsAsPlayer) {
       if (e.def.ai === 'engineer') this.engineerIdle(e, dt);
-      else {
-        const ranged = e.def.range > 2.5;
-        const rallyX = this.frontX + (ranged ? 0.5 : 3);
-        this.moveToward(e, rallyX, e.rallyZ, 0.4, dt);
-      }
+      else this.moveToward(e, this.rallyX(e), e.rallyZ, 0.4, dt);
       if (!e.moving) e.moved = 0;
     } else {
       this.moveToward(e, 0, 0, 2, dt);
     }
+  }
+
+  /** Where a soldier without a target stands: melee on the line, ranged and support behind it. */
+  rallyX(e: Entity): number {
+    if (e.def.ai === 'support') return Math.max(this.frontX - 0.5, this.pushLine - 5);
+    if (e.def.range > 2.5) return Math.max(this.frontX + 0.5, this.pushLine - 3.5);
+    return this.pushLine + (e.def.ai === 'aggressive' ? 2 : 0);
+  }
+
+  /**
+   * Moves the formation line: once enough soldiers have gathered and they are not outmatched by
+   * the enemies ahead, the line marches forward; if the enemy clearly has the upper hand it falls back.
+   */
+  private updateFormation(dt: number): void {
+    const st = STANCES[this.stance];
+    const min = this.frontX + st.minPush;
+    const max = Math.min(this.frontX + st.maxPush, SPAWN_X - 2);
+    if (min >= max) {
+      this.pushLine = min;
+      return;
+    }
+    let ours = 0;
+    let gathered = 0;
+    let theirs = 0;
+    for (const e of this.entities) {
+      if (!e.alive || e.def.ai === 'engineer') continue;
+      const power = Math.sqrt(e.maxHp * ((e.def.damage * e.dmgScale) / e.def.attackInterval + 1)) * (e.hp / e.maxHp);
+      if (e.team === 'player') {
+        if (e.def.ai === 'support') continue;
+        ours += power;
+        if (e.x >= this.pushLine - 4) gathered++;
+      } else if (e.x < this.pushLine + 14) {
+        theirs += power;
+      }
+    }
+    if (gathered >= MIN_GROUP && ours >= theirs * 0.8) this.pushLine = Math.min(max, this.pushLine + PUSH_SPEED * dt);
+    else if (ours < theirs * 0.6) this.pushLine = Math.max(min, this.pushLine - RETREAT_SPEED * dt);
   }
 
   private engineerMayChase(e: Entity, t: Entity): boolean {
@@ -1124,9 +1182,18 @@ export class Battle {
   private chooseTarget(e: Entity, actsAsPlayer: boolean): void {
     const siege = e.def.traits?.some((t) => t.type === 'siege');
     if (actsAsPlayer) {
-      const acquire = e.def.ai === 'engineer' ? 4 : e.def.ai === 'support' ? Math.max(e.def.range + 1, 7) : PLAYER_ACQUIRE;
+      const st = STANCES[this.stance];
+      const aggressive = e.def.ai === 'aggressive';
+      const acquire =
+        e.def.ai === 'engineer'
+          ? 4
+          : e.def.ai === 'support'
+            ? Math.max(e.def.range + 1, 7)
+            : Math.max(st.acquire + (aggressive ? AGGRESSIVE_BONUS : 0), e.def.range + 1.5);
+      // Never chase past the stance's leash (keeps "hold" armies under tower cover).
+      const maxX = this.frontX + st.leash + (aggressive ? AGGRESSIVE_BONUS : 0) + e.def.range;
       const cur = this.getEntity(e.targetId);
-      const foe = this.nearestFoe(e, acquire);
+      const foe = this.nearestFoe(e, acquire, maxX);
       // Stick to the current target unless something is much closer.
       if (cur?.alive && cur.team !== e.team && foe && cur !== foe) {
         const dc = dist2(e.x, e.z, cur.x, cur.z);

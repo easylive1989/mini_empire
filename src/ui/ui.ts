@@ -24,7 +24,7 @@ import {
   tileBonuses,
   type GameState,
 } from '../game/state';
-import type { BuildingDef, RaceId, UnitDef } from '../game/types';
+import type { BuildingDef, RaceId, Stance, UnitDef } from '../game/types';
 
 type Child = Node | string | number | null | undefined | false;
 
@@ -50,6 +50,12 @@ function h<K extends keyof HTMLElementTagNameMap>(
 }
 
 const coin = () => h('span', { class: 'coin' });
+
+export const STANCE_INFO: Record<Stance, { icon: string; name: string; desc: string }> = {
+  hold: { icon: '🛡', name: '堅守', desc: '士兵留在防禦塔射程內，不追擊遠方的敵人；護甲 +15%。適合依賴防禦塔的陣容。' },
+  advance: { icon: '⚔', name: '迎擊', desc: '士兵集結成隊後推進到中場迎敵，兵力不利時退回前線。' },
+  assault: { icon: '🔥', name: '突擊', desc: '全軍壓上直攻墓園、搶先打掉後排敵人；傷害 +10%、移速 +15%，但會脫離防禦塔掩護。' },
+};
 const KIND_LABEL = { resource: '資源', tower: '防禦塔', barracks: '兵營' } as const;
 
 export interface Selection {
@@ -68,6 +74,7 @@ export interface UiActions {
   repairCastle(): void;
   startWave(): void;
   setSpeed(speed: number): void;
+  setStance(stance: Stance): void;
   chooseBoon(id: string): void;
   backToTitle(): void;
   continueEndless(): void;
@@ -85,6 +92,7 @@ function unitTags(u: UnitDef): string[] {
   if (u.traits?.some((t) => t.type === 'selfDestruct')) tags.push('自爆');
   if (u.projectile) tags.push(u.damageType === 'magic' ? '法術' : '遠程');
   if (u.speed >= 4) tags.push('快速');
+  if (u.ai === 'aggressive') tags.push('衝鋒型');
   return tags;
 }
 
@@ -305,6 +313,7 @@ export class Ui {
         h(
           'div',
           { class: 'battle-status' },
+          h('span', { class: 'stance-label', title: STANCE_INFO[state.stance].desc }, `${STANCE_INFO[state.stance].icon} ${STANCE_INFO[state.stance].name}`),
           this.battleStatus,
           h(
             'div',
@@ -331,6 +340,31 @@ export class Ui {
       this.battleStatus = null;
       const w = getWave(state.wave);
       this.bottom.replaceChildren(
+        h(
+          'div',
+          { class: 'stance' },
+          h('div', { class: 'stance-title' }, '作戰姿態'),
+          h(
+            'div',
+            { class: 'stance-buttons' },
+            (Object.keys(STANCE_INFO) as Stance[]).map((s) =>
+              this.tip(
+                h(
+                  'button',
+                  {
+                    class: s === state.stance ? 'on' : '',
+                    onclick: () => {
+                      this.actions.setStance(s);
+                      this.renderBottom(state, null);
+                    },
+                  },
+                  `${STANCE_INFO[s].icon} ${STANCE_INFO[s].name}`,
+                ),
+                () => `<b>${STANCE_INFO[s].icon} ${STANCE_INFO[s].name}</b><br>${STANCE_INFO[s].desc}`,
+              ),
+            ),
+          ),
+        ),
         h('button', { class: 'start-btn', onclick: () => this.actions.startWave() }, `⚔ 開始第 ${state.wave} 波`, h('small', {}, w.boss ? '首領來襲！' : '準備好了就按空白鍵')),
       );
     } else {
@@ -739,12 +773,13 @@ export class Ui {
         h('p', {}, '🏰 中央是你的主堡。點選空地建造建築，點選建築可以升級或拆除。'),
         h('p', {}, '💰 金幣在每波結束時結算：主堡稅收＋資源建築產出＋擊殺獎勵。'),
         h('p', {}, '⚔ 兵營會在戰鬥中自動出兵，上限與速度隨等級提升；每波結束後士兵會解散。'),
+        h('p', {}, '🚩 開戰前可選擇作戰姿態：堅守（留在塔的射程內）、迎擊（集結後推進到中場）、突擊（全軍壓上）。衝鋒型兵種會比隊伍更積極地往前。'),
         h('p', {}, '🗼 防禦塔自動攻擊射程內的敵人。注意有些兵種與塔無法攻擊飛行單位！'),
         h('p', {}, '🧩 相鄰加成：兵營相鄰兵營出兵更快，資源相鄰資源產量更高，塔相鄰塔傷害更高。'),
         h('p', {}, '↘ 敵人永遠從右下方來襲，最靠近前線的建築會先被攻擊。被摧毀的建築戰後自動修復，主堡的損傷會保留，需要花金幣修復。'),
         h('p', {}, '⭐ 主堡等級決定能蓋什麼、能升到幾級、能擴張多少土地。每 5 波可以選一項祝福。'),
         h('p', {}, '🏆 撐過 30 波（第 10、20、30 波有首領）即可獲勝，之後可挑戰無盡模式。'),
-        h('p', { class: 'muted' }, '快捷鍵：空白鍵開始下一波・1/2/3 切換速度・Esc 取消選取'),
+        h('p', { class: 'muted' }, '快捷鍵：空白鍵開始下一波・1/2/3 切換速度・Q/W/E 切換作戰姿態・Esc 取消選取'),
       ),
       h('button', { class: 'btn primary', onclick: () => this.closeOverlay() }, '知道了'),
     );

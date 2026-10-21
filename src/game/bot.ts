@@ -16,7 +16,7 @@ import {
   upgradeCastle,
   type GameState,
 } from './state';
-import type { RaceId } from './types';
+import type { RaceId, Stance } from './types';
 
 /** Build orders used by the balance bot: a reasonable, not optimal, player. */
 export const BOT_PLANS: Record<RaceId, string[]> = {
@@ -45,6 +45,15 @@ export const BOT_PLANS: Record<RaceId, string[]> = {
     'angel_b_guardian', 'angel_tower', 'angel_b_aegis', 'angel_b_archer', 'angel_b_judicator', 'angel_b_seraph',
     'angel_b_healer', 'angel_b_judicator', 'angel_tower', 'angel_b_archer',
   ],
+};
+
+/** Stance the bot fights with: the tower race holds, everyone else meets the enemy in the field. */
+export const BOT_STANCE: Record<RaceId, Stance> = {
+  human: 'advance',
+  elf: 'advance',
+  dwarf: 'hold',
+  demon: 'advance',
+  angel: 'advance',
 };
 
 /** Castle level the bot aims for at each wave. */
@@ -90,6 +99,7 @@ function tryExpand(state: GameState): boolean {
 /** Spend the treasury for one prep phase. */
 export function botPrepare(state: GameState, planIndex: { n: number }): void {
   const plan = BOT_PLANS[state.race];
+  state.stance = BOT_STANCE[state.race];
   // Keep the castle alive.
   if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
 

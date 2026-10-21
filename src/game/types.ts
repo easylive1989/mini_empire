@@ -1,4 +1,6 @@
 export type RaceId = 'human' | 'elf' | 'dwarf' | 'demon' | 'angel';
+/** Army stance chosen before a wave: hold near the towers, push to midfield, or charge the graveyard. */
+export type Stance = 'hold' | 'advance' | 'assault';
 export type Team = 'player' | 'enemy';
 export type DamageType = 'physical' | 'magic';
 export type ProjectileKind =
@@ -133,8 +135,8 @@ export interface UnitDef {
   radius?: number;
   traits?: Trait[];
   bounty?: number;
-  /** AI behaviour override. */
-  ai?: 'support' | 'engineer';
+  /** AI behaviour override. `aggressive` units charge ahead of the formation. */
+  ai?: 'support' | 'engineer' | 'aggressive';
   model: ModelSpec;
 }
 

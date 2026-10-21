@@ -52,6 +52,7 @@ export const ELF_UNITS: UnitDef[] = [
     speed: 3.4,
     evasion: 0.3,
     traits: [{ type: 'counter', mult: 2.5 }],
+    ai: 'aggressive',
     model: {
       base: 'Rogue',
       keep: ['Knife', 'Knife_Offhand'],

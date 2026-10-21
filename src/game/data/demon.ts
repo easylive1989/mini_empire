@@ -54,6 +54,7 @@ export const DEMON_UNITS: UnitDef[] = [
     speed: 3.9,
     radius: 0.3,
     traits: [{ type: 'explodeOnDeath', radius: 2.1, damage: 15 }],
+    ai: 'aggressive',
     model: {
       base: 'Rogue',
       scale: 0.68,
@@ -79,6 +80,7 @@ export const DEMON_UNITS: UnitDef[] = [
       { type: 'berserk', maxAtkSpeed: 1.0 },
       { type: 'lifesteal', ratio: 0.2 },
     ],
+    ai: 'aggressive',
     model: {
       base: 'Barbarian',
       keep: ['1H_Axe', '1H_Axe_Offhand'],

@@ -53,9 +53,28 @@ export interface BattleSounds {
   play(name: string, x?: number): void;
 }
 
+/** Banner marking the formation line the army rallies on. */
+function rallyFlag(color: string): THREE.Group {
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.2, 6), new THREE.MeshStandardMaterial({ color: '#78350f' }));
+  pole.position.y = 1.6;
+  const cloth = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.3, 0.85, 6, 1),
+    new THREE.MeshStandardMaterial({ color, side: THREE.DoubleSide, emissive: color, emissiveIntensity: 0.25 }),
+  );
+  cloth.position.set(0.68, 2.7, 0);
+  cloth.name = 'cloth';
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshStandardMaterial({ color: '#facc15', metalness: 0.4 }));
+  tip.position.y = 3.25;
+  g.add(pole, cloth, tip);
+  for (const m of [pole, cloth, tip]) m.castShadow = true;
+  return g;
+}
+
 export class BattleView {
   private views = new Map<number, UnitView>();
   private battle: Battle | null = null;
+  private flag: THREE.Group | null = null;
   private ownedExtent = 1;
   private time = 0;
 
@@ -74,6 +93,9 @@ export class BattleView {
     for (const t of battle.state.tiles) if (t.owned) ext = Math.max(ext, Math.abs(t.i), Math.abs(t.j));
     this.ownedExtent = ext;
     this.town.beginBattle();
+    this.flag = rallyFlag(RACE_MAP.get(battle.state.race)!.color);
+    this.flag.position.set(battle.pushLine, 0, -1);
+    this.world.units.add(this.flag);
   }
 
   end(): void {
@@ -82,6 +104,8 @@ export class BattleView {
       this.world.fx.remove(v.bar.group);
     }
     this.views.clear();
+    if (this.flag) this.world.units.remove(this.flag);
+    this.flag = null;
     this.fx.clearProjectiles();
     if (this.battle) this.town.endBattle();
     this.battle = null;
@@ -274,6 +298,17 @@ export class BattleView {
     if (!b) return;
     this.time += dt;
     this.town.updateBattle(b);
+    if (this.flag) {
+      const fx = this.flag.position.x + (b.pushLine - this.flag.position.x) * Math.min(1, dt * 4);
+      this.flag.position.set(fx, this.groundY(fx, -1), -1);
+      const cloth = this.flag.getObjectByName('cloth') as THREE.Mesh;
+      const pos = cloth.geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let k = 0; k < pos.count; k++) {
+        const x = pos.getX(k) + 0.65;
+        pos.setZ(k, Math.sin(this.time * 6 - x * 4) * 0.12 * x);
+      }
+      pos.needsUpdate = true;
+    }
 
     for (const p of b.projectiles) {
       if (p.done) {
