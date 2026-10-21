@@ -143,6 +143,7 @@ export const HUMAN_UNITS: UnitDef[] = [
     speed: 4.2,
     armor: 0.35,
     traits: [{ type: 'charge', distance: 4, dmgMult: 2.5, stun: 1.2, exposedDuration: 3 }],
+    ai: 'aggressive',
     model: {
       base: 'Knight',
       scale: 1.15,

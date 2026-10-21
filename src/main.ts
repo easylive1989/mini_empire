@@ -17,12 +17,13 @@ import {
   isCastleTile,
   newGame,
   repairCastle,
+  setStance,
   tileAt,
   upgrade,
   upgradeCastle,
   type GameState,
 } from './game/state';
-import type { RaceId } from './game/types';
+import type { RaceId, Stance } from './game/types';
 import { loadAssets, type Assets } from './render/assets';
 import { BattleView } from './render/battleView';
 import { Effects } from './render/effects';
@@ -59,6 +60,7 @@ class App {
       repairCastle: () => this.doRepair(),
       startWave: () => this.startWave(),
       setSpeed: (s) => (this.speed = s),
+      setStance: (s) => this.doSetStance(s),
       chooseBoon: (id) => this.doChooseBoon(id),
       backToTitle: () => this.backToTitle(),
       continueEndless: () => this.doContinueEndless(),
@@ -219,6 +221,11 @@ class App {
     this.refresh(false);
   }
 
+  private doSetStance(stance: Stance): void {
+    if (!this.state || !setStance(this.state, stance)) return;
+    this.sfx.play('click');
+  }
+
   private doContinueEndless(): void {
     if (!this.state) return;
     continueEndless(this.state);
@@ -291,6 +298,10 @@ class App {
         this.speed = [1, 2, 4][Number(e.key) - 1];
         this.ui.setSpeedLabel(this.speed);
         this.ui.render(this.state, null, this.battle);
+      } else if (['q', 'w', 'e'].includes(e.key.toLowerCase()) && !this.battle && this.state.phase === 'prep') {
+        const stance = ({ q: 'hold', w: 'advance', e: 'assault' } as const)[e.key.toLowerCase() as 'q' | 'w' | 'e'];
+        this.doSetStance(stance);
+        this.ui.render(this.state, this.selection, null);
       } else if (e.key === 'u' && this.selection) {
         if (isCastleTile(this.selection.i, this.selection.j)) this.doUpgradeCastle();
         else this.doUpgrade();

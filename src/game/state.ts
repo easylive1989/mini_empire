@@ -18,7 +18,7 @@ import {
 import { BOONS, BOON_MAP } from './data/boons';
 import { getBuilding, RACE_MAP } from './data/index';
 import { Rng } from './rng';
-import type { BuildingDef, Modifiers, RaceId } from './types';
+import type { BuildingDef, Modifiers, RaceId, Stance } from './types';
 
 export interface PlacedBuilding {
   uid: number;
@@ -71,6 +71,7 @@ export interface GameState {
   expansions: number;
   boons: string[];
   endless: boolean;
+  stance: Stance;
   phase: Phase;
   boonChoices: string[];
   report: WaveReport | null;
@@ -101,6 +102,7 @@ export function newGame(race: RaceId, seed = Date.now()): GameState {
     expansions: 0,
     boons: [],
     endless: false,
+    stance: 'advance',
     phase: 'prep',
     boonChoices: [],
     report: null,
@@ -522,6 +524,12 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
   }
   if (wave === FINAL_WAVE && !state.endless && state.phase === 'prep') state.phase = 'victory';
   return report;
+}
+
+export function setStance(state: GameState, stance: Stance): boolean {
+  if (state.phase !== 'prep') return false;
+  state.stance = stance;
+  return true;
 }
 
 export function continueEndless(state: GameState): void {

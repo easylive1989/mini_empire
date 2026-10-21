@@ -500,6 +500,49 @@ button {
   color: #1c1917;
 }
 
+/* ---------------------------------------------------------------- stance */
+.stance {
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.stance-title {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+.stance-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.stance-buttons button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stance-buttons button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.stance-buttons button.on {
+  background: var(--gold);
+  color: #1c1917;
+  border-color: #fde68a;
+}
+
+.stance-label {
+  color: #fde68a;
+}
+
 /* ---------------------------------------------------------------- overlays */
 .overlay {
   position: fixed;
