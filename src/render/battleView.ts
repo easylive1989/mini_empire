@@ -168,8 +168,7 @@ export class BattleView {
           const p = b.projectiles.find((pp) => pp.id === ev.pid);
           if (!p) break;
           const toY = ev.flying ? 2.2 : p.targetBuilding !== null ? 1.5 : 0.8;
-          const fromY = p.targetId === null && p.targetBuilding === null ? ev.fromY : ev.fromY;
-          this.fx.addProjectile(p.id, p.kind, p.x, p.z, fromY, toY, Math.hypot(p.tx - p.x, p.tz - p.z));
+          this.fx.addProjectile(p.id, p.kind, p.x, p.z, ev.fromY, toY, Math.hypot(p.tx - p.x, p.tz - p.z));
           break;
         }
         case 'hit': {

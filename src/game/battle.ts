@@ -912,9 +912,9 @@ export class Battle {
         return true;
       }
       case 'charm': {
-        const foes = this.foesInRadius(e.team, e.x, e.z, tr.range).filter((f) => !f.def.boss && !this.has(f, 'charm'));
+        const foes = this.foesInRadius(e.team, e.x, e.z, tr.range).filter((f) => !f.def.boss && !f.def.large && !this.has(f, 'charm'));
         if (!foes.length) return false;
-        foes.sort((a, b) => b.maxHp - a.maxHp);
+        foes.sort((a, b) => dist2(e.x, e.z, a.x, a.z) - dist2(e.x, e.z, b.x, b.z));
         this.applyStatus(foes[0], 'charm', tr.duration, 1, e.id);
         e.attackAnim = 0.4;
         this.events.push({ type: 'attack', id: e.id });

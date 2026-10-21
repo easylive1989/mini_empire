@@ -117,7 +117,7 @@ export const DEMON_UNITS: UnitDef[] = [
     name: '魅魔',
     race: 'demon',
     role: '魅惑控制',
-    desc: '每 7 秒魅惑一名敵人（非首領）4 秒，使其為惡魔而戰。',
+    desc: '每 8 秒魅惑最近的一名敵人（首領與大型敵人除外）3 秒，使其為惡魔而戰。',
     hp: 145,
     damage: 18,
     attackInterval: 1.2,
@@ -126,7 +126,7 @@ export const DEMON_UNITS: UnitDef[] = [
     damageType: 'magic',
     canHitAir: true,
     projectile: 'shadow',
-    traits: [{ type: 'charm', interval: 7, range: 7, duration: 4 }],
+    traits: [{ type: 'charm', interval: 8, range: 7, duration: 3 }],
     model: {
       base: 'Rogue_Hooded',
       keep: ['Knife', 'Knife_Offhand'],

@@ -154,13 +154,12 @@ export class TownView {
         continue;
       }
       if (cur && cur.defId === defId && cur.uid === uid && cur.level === level && !raceChanged) continue;
-      const isNew = !cur || cur.uid !== uid || cur.defId !== defId;
       if (cur) this.removeView(k);
-      this.addView(k, t.i, t.j, defId, level, uid, animate && !raceChanged, isNew);
+      this.addView(k, t.i, t.j, defId, level, uid, animate && !raceChanged);
     }
   }
 
-  private addView(k: string, i: number, j: number, defId: string, level: number, uid: number, animate: boolean, isNew: boolean): void {
+  private addView(k: string, i: number, j: number, defId: string, level: number, uid: number, animate: boolean): void {
     const group = new THREE.Group();
     group.position.set(i * TILE, TILE_TOP, j * TILE);
     let model: THREE.Object3D;
@@ -198,7 +197,6 @@ export class TownView {
     this.world.buildings.add(group);
     this.views.set(k, view);
     if (animate) this.onBuilt(i * TILE, j * TILE);
-    void isNew;
   }
 
   private removeView(k: string): void {
