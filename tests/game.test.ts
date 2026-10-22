@@ -332,3 +332,62 @@ describe('army formation', () => {
     expect(b.rallyX(archer)).toBeLessThan(b.rallyX(militia));
   });
 });
+
+describe('battle statistics', () => {
+  /** A human town with a militia camp, an archery range and an arrow tower, fighting wave 3. */
+  function town(): ReturnType<typeof newGame> {
+    const s = newGame('human', 7);
+    s.gold = 5000;
+    upgradeCastle(s);
+    build(s, 1, 0, 'human_b_militia');
+    build(s, 1, 1, 'human_b_archer');
+    build(s, 1, -1, 'human_tower');
+    s.wave = 3;
+    s.phase = 'battle';
+    return s;
+  }
+
+  it('credits every kill to a soldier, a tower or the castle', () => {
+    const b = simulateBattle(town());
+    expect(b.result).toBe('win');
+    const credited = [...b.bySource.values()].reduce((n, s) => n + s.kills, 0);
+    expect(credited).toBe(b.kills);
+    const keys = [...b.bySource.keys()];
+    expect(keys).toContain('human_tower');
+    expect(keys).toContain('human_militia');
+    for (const k of keys) expect(k === 'castle' || BUILDINGS.has(k) || UNITS.has(k)).toBe(true);
+  });
+
+  it('names the soldier with the most kills as MVP', () => {
+    const b = simulateBattle(town());
+    expect(b.mvp).not.toBeNull();
+    const killers = b.entities.filter((e) => e.baseTeam === 'player');
+    expect(b.mvp!.kills).toBe(Math.max(...killers.map((e) => e.kills)));
+    expect(b.topSources()[0].damage).toBeGreaterThanOrEqual(b.topSources().at(-1)!.damage);
+  });
+
+  it('samples both armies once per second and reports them with the wave', () => {
+    const s = town();
+    const b = simulateBattle(s);
+    expect(b.timeline.length).toBeGreaterThanOrEqual(Math.floor(b.time) - 1);
+    expect(b.timeline.some((p) => p.theirs > 0)).toBe(true);
+    expect(b.timeline.every((p) => p.ours >= 0 && p.castle > 0 && p.castle <= 1)).toBe(true);
+    const report = applyBattleOutcome(s, b.outcome());
+    expect(report.sources.length).toBeGreaterThan(0);
+    expect(report.timeline).toHaveLength(b.timeline.length);
+    expect(report.duration).toBe(Math.round(b.time));
+  });
+
+  it('keeps the fight itself unchanged by the bookkeeping', () => {
+    const a = simulateBattle(town());
+    const b = simulateBattle(town());
+    expect(a.outcome()).toEqual(b.outcome());
+  });
+
+  it('adds castle damage to the running total', () => {
+    const s = newGame('human', 3);
+    s.phase = 'battle';
+    applyBattleOutcome(s, { won: true, castleHp: s.castleHp - 120, kills: 0, bounty: 0, playerDeaths: 0 });
+    expect(s.stats.castleDamage).toBe(120);
+  });
+});

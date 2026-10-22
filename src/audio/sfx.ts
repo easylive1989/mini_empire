@@ -163,6 +163,22 @@ export class Sfx {
       case 'boon':
         [659, 880, 1109, 1319].forEach((f, k) => this.tone(f, 0.35, 'sine', 0.09, undefined, k * 0.09));
         break;
+      case 'slam':
+        // The title lands: a timpani thud and cymbal wash under a three-chord brass call (I–IV–I).
+        this.tone(98, 1.6, 'sine', 0.5, 55);
+        this.tone(147, 0.9, 'triangle', 0.2, 98);
+        this.hiss(0.25, 0.4, 800);
+        this.hiss(1.6, 0.22, 4200);
+        [262, 330, 392].forEach((f) => this.tone(f, 0.32, 'sawtooth', 0.04, undefined, 0.04));
+        [349, 440, 523].forEach((f) => this.tone(f, 0.32, 'sawtooth', 0.04, undefined, 0.36));
+        [392, 523, 659, 784].forEach((f) => this.tone(f, 1.5, 'sawtooth', 0.035, undefined, 0.68));
+        this.tone(98, 1.2, 'sine', 0.3, 70, 0.68);
+        break;
+      case 'card':
+        // An intertitle: one low drum stroke and a soft page-turn whoosh.
+        this.tone(73, 0.8, 'sine', 0.3, 50);
+        this.hiss(0.5, 0.1, 700, 'bandpass');
+        break;
     }
   }
 }

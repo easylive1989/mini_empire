@@ -1927,15 +1927,24 @@ hr {
   animation: fade-in 0.8s ease-out;
 }
 
-.ts-logo {
-  margin: 18px 0 0;
+.ts-logo,
+.ts-big b,
+.slam-logo b {
   font-family: var(--serif);
   font-weight: 900;
-  font-size: clamp(64px, 7vw, 92px);
   line-height: 1;
   letter-spacing: 10px;
-  color: var(--parchment);
-  text-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  /* engraved gold */
+  background: linear-gradient(180deg, #fff6d2 0%, #f3d185 30%, #c99033 55%, #f1d48c 72%, #8d5f1f 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(60, 34, 8, 0.9)) drop-shadow(0 8px 22px rgba(0, 0, 0, 0.7));
+}
+
+.ts-logo {
+  margin: 18px 0 0;
+  font-size: clamp(64px, 7vw, 92px);
 }
 
 .ts-tagline {
@@ -2149,7 +2158,8 @@ hr {
   position: fixed;
   inset: 0;
   z-index: 45;
-  pointer-events: none;
+  overflow: hidden;
+  cursor: pointer;
 }
 
 .letterbox {
@@ -2175,16 +2185,35 @@ hr {
 }
 
 .subtitle-text {
-  max-width: 900px;
+  max-width: 920px;
   padding: 0 30px;
   min-height: 1.6em;
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 23px;
   line-height: 1.6;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   text-align: center;
   color: var(--parchment);
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* Each character fades up out of a soft blur, on its own delay (set inline). */
+.subtitle-text span {
+  opacity: 0;
+  animation: sub-char 0.42s ease-out forwards;
+}
+
+@keyframes sub-char {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
 }
 
 .shot-dots {
@@ -2370,29 +2399,48 @@ hr {
   z-index: 60;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
   pointer-events: none;
+  transition: top 0.25s;
 }
 
+/* Under the boss bar while a boss is on the field, so the two never overlap. */
+.toast-area.under-boss {
+  top: 158px;
+}
+
+/* A slim ticker line: an accent bar on the left says whether it is good or bad news. */
 .toast {
-  padding: 10px 18px;
-  border-radius: 10px;
+  max-width: min(560px, calc(100vw - 700px));
+  min-width: 220px;
+  padding: 7px 16px 7px 14px;
+  border-radius: 6px;
   border: 1px solid var(--brass-line);
-  background: rgba(17, 20, 29, 0.96);
+  border-left: 3px solid var(--brass);
+  background: rgba(13, 15, 22, 0.94);
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1.45;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   animation: toast-in 0.25s ease-out;
 }
 
 .toast.bad {
-  border-color: var(--crimson);
+  border-color: rgba(200, 69, 47, 0.55);
+  border-left-color: var(--crimson);
   color: var(--crimson-hi);
 }
 
 .toast.good {
-  border-color: var(--verdant);
+  border-color: rgba(95, 174, 107, 0.55);
+  border-left-color: var(--verdant);
   color: var(--verdant-hi);
+}
+
+.toast.info {
+  border-left-color: var(--gold);
+  color: var(--gold-hi);
 }
 
 @keyframes toast-in {
@@ -2502,4 +2550,1247 @@ hr {
 
 .loading .meter {
   width: 320px;
+}
+
+/* ---------------------------------------------------------------- gold pill */
+.gold-pill {
+  position: relative;
+}
+
+.gold-pill.gain {
+  animation: gold-gain 0.7s ease-out;
+}
+
+.gold-pill.spend {
+  animation: gold-spend 0.5s ease-out;
+}
+
+@keyframes gold-gain {
+  0% {
+    transform: scale(1);
+    background: rgba(226, 179, 74, 0.12);
+  }
+  25% {
+    transform: scale(1.12);
+    background: rgba(226, 179, 74, 0.45);
+  }
+}
+
+@keyframes gold-spend {
+  0%,
+  30% {
+    background: rgba(200, 69, 47, 0.45);
+  }
+}
+
+.gold-delta {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  margin-left: 6px;
+  font-family: var(--num);
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: delta-out 1.4s ease-out forwards;
+}
+
+.gold-delta.gain {
+  color: var(--gold-hi);
+}
+
+.gold-delta.spend {
+  color: var(--crimson-hi);
+}
+
+@keyframes delta-out {
+  0% {
+    opacity: 0;
+    transform: translate(-6px, -50%);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(4px, -110%);
+  }
+}
+
+/* ---------------------------------------------------------------- floating numbers */
+.floaters {
+  position: fixed;
+  inset: 0;
+  z-index: 12;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floater {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.floater span {
+  display: block;
+  transform: translate(-50%, -50%);
+  font-family: var(--num);
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 #000, 0 0 6px rgba(0, 0, 0, 0.85);
+  animation: float-rise 1.15s ease-out forwards;
+}
+
+.floater span.bump {
+  animation: float-bump 1.15s ease-out forwards;
+}
+
+.floater.gold span {
+  color: var(--gold-hi);
+}
+
+.floater.steal span {
+  color: #fca5a5;
+  font-family: var(--sans);
+  font-size: 14px;
+}
+
+.floater.damage span {
+  color: #ff8f7a;
+  font-size: 18px;
+}
+
+@keyframes float-rise {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30%) scale(0.7);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.08);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -230%) scale(1);
+  }
+}
+
+@keyframes float-bump {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -60%) scale(1.35);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -230%) scale(1);
+  }
+}
+
+/* ---------------------------------------------------------------- battle meter */
+.bottombar .tug {
+  align-self: center;
+  display: grid;
+  grid-template-columns: auto 220px auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 3px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--brass-line);
+  background: var(--panel);
+  transition: opacity 0.3s;
+}
+
+.tug.dim {
+  opacity: 0.55;
+}
+
+.tug-side {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.tug-side.ours {
+  color: var(--verdant-hi);
+}
+
+.tug-side.theirs {
+  color: var(--crimson-hi);
+}
+
+.tug-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: linear-gradient(90deg, #8d2c1c, var(--crimson));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+.tug-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, #3f8a4c, var(--verdant));
+  transition: width 0.3s ease-out;
+}
+
+.tug-bar > i::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -2px;
+  bottom: -2px;
+  width: 3px;
+  background: var(--parchment);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+}
+
+.tug-mid {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.tug-note {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.tug.winning .tug-note {
+  color: var(--verdant-hi);
+}
+
+.tug.losing .tug-note {
+  color: var(--crimson-hi);
+}
+
+.tug.turn-good {
+  animation: turn-good 1.4s ease-out;
+}
+
+.tug.turn-bad {
+  animation: turn-bad 1.4s ease-out;
+}
+
+@keyframes turn-good {
+  0%,
+  40% {
+    border-color: var(--verdant);
+    box-shadow: 0 0 0 3px rgba(95, 174, 107, 0.45), 0 0 26px rgba(95, 174, 107, 0.55);
+  }
+}
+
+@keyframes turn-bad {
+  0%,
+  40% {
+    border-color: var(--crimson);
+    box-shadow: 0 0 0 3px rgba(200, 69, 47, 0.45), 0 0 26px rgba(200, 69, 47, 0.55);
+  }
+}
+
+/* ---------------------------------------------------------------- counter advisor */
+.threats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.threat {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.th-ico {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-3);
+}
+
+.th-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.th-body b {
+  font-size: 13px;
+}
+
+.th-body em {
+  font-style: normal;
+  color: var(--text-3);
+}
+
+.th-body small {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.threat.warn {
+  background: rgba(200, 69, 47, 0.12);
+  border-color: rgba(200, 69, 47, 0.45);
+}
+
+.threat.warn .th-ico,
+.threat.warn small {
+  color: var(--crimson-hi);
+}
+
+.threat.ok .th-ico {
+  color: var(--verdant);
+}
+
+.threat.info .th-ico {
+  color: var(--gold);
+}
+
+.sec-title small.bad {
+  color: var(--crimson-hi);
+}
+
+.bcard {
+  position: relative;
+}
+
+.bc-counter {
+  position: absolute;
+  top: 34px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(226, 179, 74, 0.9);
+  color: var(--gold-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.bcard.counter {
+  border-color: rgba(226, 179, 74, 0.45);
+}
+
+.bcard.urgent {
+  border-color: rgba(226, 179, 74, 0.8);
+  animation: counter-pulse 1.6s ease-in-out 3;
+}
+
+@keyframes counter-pulse {
+  50% {
+    box-shadow: 0 0 0 2px rgba(226, 179, 74, 0.35), 0 0 18px rgba(226, 179, 74, 0.35);
+  }
+}
+
+.tabs button {
+  position: relative;
+}
+
+.tab-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--panel-solid);
+}
+
+.tabs button.on .tab-dot {
+  background: var(--gold-ink);
+  box-shadow: none;
+}
+
+.tip-counter {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--gold-hi);
+  font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- wave report */
+.chart svg {
+  display: block;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.chart .area {
+  stroke: none;
+}
+
+.chart .area.ours {
+  fill: rgba(95, 174, 107, 0.22);
+}
+
+.chart .area.theirs {
+  fill: rgba(200, 69, 47, 0.2);
+}
+
+.chart .line {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart .line.ours {
+  stroke: var(--verdant-hi);
+}
+
+.chart .line.theirs {
+  stroke: #f08a76;
+}
+
+.chart .line.castle {
+  stroke: var(--gold);
+  stroke-dasharray: 3 3;
+  stroke-width: 1.2;
+}
+
+.chart-legend {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.chart-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 4px;
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.chart-legend .ours::before {
+  background: var(--verdant);
+}
+
+.chart-legend .theirs::before {
+  background: var(--crimson);
+}
+
+.chart-legend .castle::before {
+  height: 2px;
+  vertical-align: 3px;
+  background: var(--gold);
+}
+
+.chart-legend em {
+  margin-left: auto;
+  font-style: normal;
+}
+
+.sub-title {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.dmg-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.dmg-row .kv {
+  margin-bottom: 3px;
+}
+
+.dmg-row .kv em {
+  font-style: normal;
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--text-4);
+}
+
+.dmg-row .meter > i {
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold));
+}
+
+.mvp-card {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 179, 74, 0.4);
+  background: linear-gradient(90deg, rgba(226, 179, 74, 0.16), rgba(226, 179, 74, 0.03));
+}
+
+.mvp-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gold);
+  color: var(--gold-ink);
+}
+
+.mvp-card > span:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.mvp-card small {
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--brass);
+}
+
+.mvp-card b {
+  font-family: var(--serif);
+  font-size: 15px;
+}
+
+.mvp-card em {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.kv b.bad {
+  color: var(--crimson-hi);
+}
+
+.report-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+  text-align: left;
+}
+
+.tip-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--brass-line);
+  background: rgba(226, 179, 74, 0.08);
+  text-align: left;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.tip-card .ico {
+  margin-top: 2px;
+  color: var(--gold);
+}
+
+.tip-card small {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--brass);
+}
+
+/* ---------------------------------------------------------------- title entrance */
+.title-screen > :is(.ts-gate, .ts-flash, .ts-big) {
+  position: absolute;
+  pointer-events: none;
+}
+
+.ts-gate {
+  inset: 0;
+  display: none;
+  background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(11, 13, 19, 0.15), rgba(11, 13, 19, 0.82));
+}
+
+.title-screen.ts-wait .ts-gate {
+  display: block;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ts-presents,
+.ts-press {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-family: var(--serif);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+.ts-presents {
+  top: 9vh;
+  font-size: 15px;
+  letter-spacing: 0.6em;
+  color: var(--brass);
+  animation: fade-in 1.6s 0.3s ease both;
+}
+
+.ts-press {
+  bottom: 11vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 26px;
+  letter-spacing: 0.25em;
+  color: var(--parchment);
+  animation: fade-in 1.2s 0.8s ease both, press-pulse 2.2s 2s ease-in-out infinite;
+}
+
+.ts-press svg {
+  width: 90px;
+  color: var(--gold);
+  stroke-width: 1.2;
+}
+
+@keyframes press-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* Waiting at the gate, and while the logo slams: no menu yet. */
+.title-screen:is(.ts-wait, .ts-slam) :is(.ts-col, .ts-foot, .save-card) {
+  visibility: hidden;
+}
+
+.title-screen:is(.ts-wait, .ts-slam, .ts-in, .ts-quick) .ts-col {
+  animation: none;
+}
+
+/* The menu's own logo waits until the slammed one has glided into its place. */
+.title-screen:is(.ts-wait, .ts-slam, .ts-in):not(.ts-done) .ts-logo {
+  visibility: hidden;
+}
+
+.title-screen.ts-wait .ts-scrim {
+  opacity: 0;
+}
+
+.ts-scrim {
+  transition: opacity 0.8s;
+}
+
+.ts-flash {
+  inset: 0;
+  background: #fff8e6;
+  opacity: 0;
+}
+
+.title-screen.ts-slam .ts-flash {
+  animation: slam-flash 0.7s ease-out;
+}
+
+@keyframes slam-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.ts-big {
+  left: 0;
+  right: 0;
+  top: 40%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  opacity: 0;
+  transform-origin: 50% 50%;
+}
+
+.ts-big b {
+  font-size: clamp(90px, 12vw, 170px);
+  padding: 0 0.1em 0.05em 0.2em;
+}
+
+.ts-big span {
+  font-family: var(--serif);
+  font-size: clamp(20px, 2.2vw, 30px);
+  letter-spacing: 0.6em;
+  color: #d9c08a;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+.title-screen.ts-slam .ts-big {
+  opacity: 1;
+  animation: logo-slam 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.title-screen.ts-slam .ts-big span {
+  animation: fade-up 0.6s 0.45s ease-out both;
+}
+
+.title-screen.ts-in .ts-big {
+  opacity: 1;
+}
+
+.title-screen.ts-in .ts-big span {
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.title-screen.ts-done .ts-big {
+  display: none;
+}
+
+@keyframes logo-slam {
+  0% {
+    opacity: 0;
+    transform: scale(2.6);
+    filter: blur(12px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+/* The menu pops in, row by row (each row's --i is set by the title code); on later visits the logo too. */
+.title-screen.ts-quick .ts-logo,
+.title-screen:is(.ts-in, .ts-quick) :is(.ts-col > *:not(.ts-logo, .ts-menu), .ts-menu > *, .ts-foot, .save-card) {
+  animation: ts-pop 0.5s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  animation-delay: calc(0.3s + var(--i, 0) * 55ms);
+}
+
+@keyframes ts-pop {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-screen * {
+    animation: none !important;
+  }
+}
+
+/* ---------------------------------------------------------------- the film look */
+.cutscene-layer.opening .letterbox.top {
+  animation: bars-in-top 1s ease-out both;
+}
+
+.cutscene-layer.opening .letterbox.bottom {
+  animation: bars-in-bottom 1s ease-out both;
+}
+
+@keyframes bars-in-top {
+  from {
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes bars-in-bottom {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.cut-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+.cut-fx,
+.cut-fx > i {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Grain: an SVG noise tile, jittered a few times a second. */
+.fx-grain {
+  inset: -80px !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.48 0 0 0 0 0.38 0 0 0 0.9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 180px;
+  mix-blend-mode: overlay;
+  opacity: 0.22;
+  animation: fx-grain 0.5s steps(1) infinite;
+}
+
+@keyframes fx-grain {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-37px, 21px);
+  }
+  40% {
+    transform: translate(19px, -43px);
+  }
+  60% {
+    transform: translate(-11px, 47px);
+  }
+  80% {
+    transform: translate(41px, 9px);
+  }
+}
+
+.fx-flick {
+  background: #fff1d0;
+  opacity: 0;
+  animation: fx-flick 2.7s steps(1) infinite;
+}
+
+@keyframes fx-flick {
+  0% {
+    opacity: 0.02;
+  }
+  9% {
+    opacity: 0;
+  }
+  17% {
+    opacity: 0.03;
+  }
+  44% {
+    opacity: 0.02;
+  }
+  48% {
+    opacity: 0;
+  }
+  71% {
+    opacity: 0.035;
+  }
+  90% {
+    opacity: 0.02;
+  }
+}
+
+.fx-vig {
+  background: radial-gradient(ellipse 75% 70% at 50% 48%, rgba(10, 5, 0, 0) 55%, rgba(10, 5, 0, 0.55) 100%);
+}
+
+/* 效能模式: a still grain and no flicker. */
+.perf-low .fx-grain,
+.perf-low .fx-flick {
+  animation: none;
+}
+
+/* Chapter heading in the top letterbox. */
+.cut-chapter {
+  position: absolute;
+  left: clamp(24px, 5vw, 72px);
+  bottom: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-family: var(--serif);
+  opacity: 0;
+}
+
+.cut-chapter small {
+  font-size: 13px;
+  letter-spacing: 0.4em;
+  color: var(--brass);
+}
+
+.cut-chapter b {
+  font-size: 22px;
+  letter-spacing: 0.25em;
+  color: var(--parchment);
+}
+
+.cut-chapter.in {
+  animation: chapter-in 1.2s 0.4s ease-out both;
+}
+
+@keyframes chapter-in {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+    letter-spacing: 0.5em;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Intertitle card: a framed line on black, like the title cards of an old film. */
+.cut-card {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, #1b1710 0%, #070604 80%);
+  pointer-events: none;
+}
+
+.cut-card.card-in .cc-frame {
+  animation: card-flicker 0.45s ease-out both;
+}
+
+@keyframes card-flicker {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.65;
+  }
+  45% {
+    opacity: 0.25;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.cc-frame {
+  position: absolute;
+  inset: max(5vmin, 18px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3vmin;
+  border: 1.5px solid var(--brass);
+  box-shadow: inset 0 0 0 5px #070604, inset 0 0 0 6px rgba(243, 228, 191, 0.45);
+  color: var(--brass);
+}
+
+.cc-c {
+  position: absolute;
+  width: clamp(64px, 16vmin, 140px);
+  height: clamp(64px, 16vmin, 140px);
+}
+
+.cc-c svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  stroke-width: 1.6;
+}
+
+.cc-c.tl {
+  left: -1px;
+  top: -1px;
+}
+
+.cc-c.tr {
+  right: -1px;
+  top: -1px;
+  transform: scaleX(-1);
+}
+
+.cc-c.bl {
+  left: -1px;
+  bottom: -1px;
+  transform: scaleY(-1);
+}
+
+.cc-c.br {
+  right: -1px;
+  bottom: -1px;
+  transform: scale(-1, -1);
+}
+
+.cc-fleuron {
+  width: clamp(120px, 26vmin, 220px);
+  stroke-width: 1.2;
+  opacity: 0.9;
+}
+
+.cc-eyebrow {
+  font-family: var(--serif);
+  font-size: clamp(14px, 2.2vmin, 20px);
+  letter-spacing: 0.8em;
+  color: var(--brass);
+}
+
+.cc-eyebrow:empty {
+  display: none;
+}
+
+.cc-text {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(34px, 7.5vmin, 72px);
+  letter-spacing: 0.18em;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--parchment);
+  text-shadow: 0 0 22px rgba(255, 230, 170, 0.2);
+}
+
+/* The finale: a flash, then the logo slams onto the last shot. */
+.cut-slam {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.slam-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff8e6;
+  opacity: 0;
+}
+
+.cut-slam.go .slam-flash {
+  animation: slam-flash 0.7s ease-out;
+}
+
+.slam-logo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  background: radial-gradient(ellipse 45% 60% at 50% 50%, rgba(8, 9, 14, 0.62), rgba(8, 9, 14, 0) 70%);
+  padding: 50px 0;
+}
+
+.slam-logo b {
+  font-size: clamp(80px, 11vw, 160px);
+  padding: 0 0.1em 0.05em 0.2em;
+}
+
+.slam-rule {
+  width: min(560px, 46vw);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #e9bb5e 20%, #fff1c8 50%, #e9bb5e 80%, transparent);
+}
+
+.slam-logo small {
+  font-family: var(--serif);
+  font-size: clamp(18px, 2vw, 28px);
+  letter-spacing: 0.6em;
+  color: #e6d3a6;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+.cut-slam.go .slam-logo b {
+  animation: logo-slam 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+
+.cut-slam.go .slam-rule {
+  animation: rule-grow 0.8s 0.35s ease-out both;
+}
+
+.cut-slam.go .slam-logo small {
+  animation: fade-up 0.7s 0.55s ease-out both;
+}
+
+@keyframes rule-grow {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+}
+
+/* ---------------------------------------------------------------- star ratings */
+.rating {
+  display: inline-flex;
+  gap: 2px;
+  color: rgba(201, 163, 92, 0.45);
+}
+
+.rating .on {
+  color: var(--gold);
+}
+
+.rating i {
+  display: inline-flex;
+}
+
+.rating .fresh {
+  animation: star-pop 0.55s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  animation-delay: calc(0.35s + var(--k) * 0.28s);
+}
+
+@keyframes star-pop {
+  from {
+    opacity: 0;
+    transform: scale(2.2) rotate(-25deg);
+    filter: drop-shadow(0 0 0 rgba(246, 217, 143, 0));
+  }
+  60% {
+    filter: drop-shadow(0 0 10px rgba(246, 217, 143, 0.9));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.map-label .rating {
+  margin-left: 4px;
+  gap: 1px;
+}
+
+.star-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0 2px;
+}
+
+.star-banner .rating {
+  gap: 8px;
+}
+
+.new-best {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  background: var(--gold);
+  color: var(--gold-ink);
+  animation: fade-up 0.5s 1.3s ease-out both;
+}
+
+.star-rules {
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-4);
+  text-align: left;
+}
+
+.star-rules li {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.star-rules li.done {
+  color: var(--text-2);
+}
+
+.star-rules li.done .ico {
+  color: var(--verdant);
+}
+
+.decree .star-rules {
+  width: fit-content;
+  margin: 4px auto 10px;
+}
+
+.btn.replay-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.btn.replay-btn > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-weight: 700;
+}
+
+.btn.replay-btn small {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.star-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gold-hi);
+}
+
+/* ---------------------------------------------------------------- world map wild regions */
+.region-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #f3e4bf;
+  text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.region-label small {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: #d8c9a4;
+}
+
+.region-label.lake {
+  color: #cfe8f0;
+}
+
+.map-legend .lg-wild {
+  background: repeating-linear-gradient(135deg, #6b7a5a 0 3px, #8a8f80 3px 6px);
+}
+
+.map-legend .lg-hint {
+  color: var(--text-4);
 }

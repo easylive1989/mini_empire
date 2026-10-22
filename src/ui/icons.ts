@@ -34,6 +34,10 @@ const PATHS = {
   skip: 'M5 5l9 7-9 7zM18 5v14',
   close: 'M6 6l12 12M18 6L6 18',
   scroll: 'M7 4h11a2 2 0 0 1 2 2v1H9M7 4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V9M7 4a2 2 0 0 1 2 2v12M12 11h5M12 15h5',
+  warn: 'M12 4l9 16H3zM12 10v4M12 17.2h.01',
+  target: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zM12 11.5h.01',
+  replay: 'M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4',
+  medal: 'M8 3h8l-2 6h-4zM12 21a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 12.5l1 2 2.2.3-1.6 1.5.4 2.2-2-1-2 1 .4-2.2-1.6-1.5 2.2-.3z',
 } as const;
 
 export type IconName = keyof typeof PATHS;

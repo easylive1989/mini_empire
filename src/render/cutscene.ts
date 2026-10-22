@@ -183,6 +183,37 @@ export class Cutscene {
     this.clearStage();
   }
 
+  /** Seconds into the last beat when its logo slams in (the end of the beat when it has none). */
+  private get slamAt(): number {
+    const last = this.lines[this.lines.length - 1];
+    return last?.slam?.at ?? last?.duration ?? 0;
+  }
+
+  /** True once the finale's logo is on screen: skipping then ends the cutscene. */
+  get atFinale(): boolean {
+    return this.index === this.shots.length - 1 && this.t >= this.slamAt - 0.3;
+  }
+
+  /**
+   * Skips to just before the finale's logo slam, running the last shot up to there so its actors,
+   * camera and map are in place (the player still gets the title moment, not a hard cut to the map).
+   */
+  skipToFinale(): void {
+    const last = this.shots.length - 1;
+    if (this.finished || this.index === last) {
+      if (this.t < this.slamAt - 0.6) this.fastForward(this.slamAt - 0.6);
+      return;
+    }
+    this.index = last - 1;
+    this.next();
+    this.fastForward(this.slamAt - 0.6);
+  }
+
+  private fastForward(to: number): void {
+    const step = 1 / 20;
+    while (this.t < to) this.advance(step);
+  }
+
   private next(): void {
     this.index++;
     this.t = 0;
@@ -197,16 +228,20 @@ export class Cutscene {
 
   update(dt: number): CutsceneFrame {
     if (this.finished) return { line: null, lineTime: 0, index: this.index, count: this.shots.length };
+    this.advance(dt);
+    const frame = { line: this.lines[this.index], lineTime: this.t, index: this.index, count: this.shots.length };
+    if (this.t >= this.shots[this.index].duration) this.next();
+    return frame;
+  }
+
+  /** Runs the current shot forward (without moving on to the next one). */
+  private advance(dt: number): void {
     this.t += dt;
-    const shot = this.shots[this.index];
-    shot.tick(this.t, dt);
+    this.shots[this.index].tick(this.t, dt);
     for (const a of this.actors) a.update(dt);
     this.fire.update(dt);
     this.smoke.update(dt);
     if (this.showingMap) this.map.update(dt);
-    const frame = { line: this.lines[this.index], lineTime: this.t, index: this.index, count: this.shots.length };
-    if (this.t >= shot.duration) this.next();
-    return frame;
   }
 
   // ---------------------------------------------------------------- stage helpers
@@ -546,6 +581,12 @@ export class Cutscene {
           },
         );
       }
+      case 'card':
+        // An intertitle: the overlay covers the screen, the stage stays dark behind it.
+        return S(
+          () => this.mood('night'),
+          () => {},
+        );
       case 'map':
         return S(
           () => {

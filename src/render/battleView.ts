@@ -5,6 +5,7 @@ import type { StatusId } from '../game/types';
 import type { Assets } from './assets';
 import { HpBar } from './bars';
 import type { Effects } from './effects';
+import { Floaters } from './floaters';
 import { createUnitModel, type UnitModel } from './models';
 import type { TownView } from './town';
 import { TILE_TOP, type World } from './world';
@@ -76,6 +77,7 @@ export class BattleView {
   private flag: THREE.Group | null = null;
   private ownedExtent = 1;
   private time = 0;
+  private readonly floaters: Floaters;
 
   constructor(
     private readonly world: World,
@@ -83,7 +85,9 @@ export class BattleView {
     private readonly fx: Effects,
     private readonly town: TownView,
     private readonly sounds: BattleSounds,
-  ) {}
+  ) {
+    this.floaters = new Floaters(world);
+  }
 
   begin(battle: Battle): void {
     this.end();
@@ -106,6 +110,7 @@ export class BattleView {
     if (this.flag) this.world.units.remove(this.flag);
     this.flag = null;
     this.fx.clearProjectiles();
+    this.floaters.clear();
     if (this.battle) this.town.endBattle();
     this.battle = null;
   }
@@ -259,6 +264,7 @@ export class BattleView {
         case 'buildingHit': {
           const bb = b.getBuilding(ev.uid);
           if (bb && Math.random() < 0.4) this.fx.burst(bb.x + (Math.random() - 0.5) * 2, 1, bb.z + (Math.random() - 0.5) * 2, '#a8a29e', 3, 1.5, 0.3, 0.4, 2);
+          if (bb?.isCastle) this.floaters.pop(bb.x, this.town.buildingTop(0) + 0.8, bb.z, ev.amount, 'damage');
           this.town.shake(ev.uid);
           break;
         }
@@ -273,6 +279,7 @@ export class BattleView {
         }
         case 'gold':
           if (Math.random() < 0.6) this.fx.rise(ev.x, 0.8, ev.z, '#facc15', 3, 0.3, 0.3);
+          this.floaters.pop(ev.x, 1.8, ev.z, ev.amount, 'gold');
           break;
         case 'chain':
           this.fx.chain(ev.points, 3.4);
@@ -283,6 +290,7 @@ export class BattleView {
         case 'steal':
           this.fx.rise(ev.x, 1.2, ev.z, '#facc15', 10, 0.35, 0.8);
           this.fx.burst(ev.x, 1.5, ev.z, '#fde047', 6, 2, 0.3, 0.5, 2);
+          this.floaters.pop(ev.x, 2.6, ev.z, ev.amount, 'steal');
           this.sounds.play('coin', ev.x);
           break;
         case 'enrage': {
@@ -304,6 +312,7 @@ export class BattleView {
     if (!b) return;
     this.time += dt;
     this.town.updateBattle(b);
+    this.floaters.update();
     if (this.flag) {
       const fx = this.flag.position.x + (b.pushLine - this.flag.position.x) * Math.min(1, dt * 4);
       this.flag.position.set(fx, this.groundY(fx, -1), -1);

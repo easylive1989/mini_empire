@@ -1,25 +1,34 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, simulateBattle, waveForState } from '../src/game/battle';
 import {
+  battleStars,
   campaignPerks,
   campaignUnlocks,
   createLevelState,
   isAttackable,
+  isReplayable,
   loadCampaign,
   newCampaign,
   recordBattle,
   saveCampaign,
   startingCastle,
   startingGold,
+  starTotal,
+  territoryStars,
+  SAVE_KEY,
   type KeyValueStore,
 } from '../src/game/campaign/campaign';
 import { getCampaignWave, territoryWaveCount } from '../src/game/campaign/campaignWaves';
 import { PERK_MAP } from '../src/game/campaign/perks';
 import { TERRAINS } from '../src/game/campaign/terrain';
 import {
+  BOARD_RADIUS,
   CAPITAL_TERRITORY,
+  getTerritory,
   hexDistance,
   neighbours,
+  REGIONS,
+  regionAt,
   START_TERRITORY,
   TERRITORIES,
   territoryTier,
@@ -33,12 +42,35 @@ function memoryStore(): KeyValueStore {
 }
 
 describe('world map', () => {
-  it('is a radius-2 hex grid of 19 territories from the refuge to the capital', () => {
+  it('places 19 territories on the hex board, from the refuge to the capital', () => {
     expect(TERRITORIES).toHaveLength(19);
     const keys = new Set(TERRITORIES.map((t) => `${t.q},${t.r}`));
     expect(keys.size).toBe(19);
-    for (const t of TERRITORIES) expect(hexDistance(t, { q: 0, r: 0 })).toBeLessThanOrEqual(2);
+    for (const t of TERRITORIES) expect(hexDistance(t, { q: 0, r: 0 })).toBeLessThanOrEqual(3);
     expect(hexDistance(START_TERRITORY, CAPITAL_TERRITORY)).toBe(4);
+  });
+
+  it('lays named wild regions on free cells, every territory still reachable from the refuge', () => {
+    const territoryAt = new Set(TERRITORIES.map((t) => `${t.q},${t.r}`));
+    for (const g of REGIONS) {
+      for (const [q, r] of g.cells) {
+        expect(territoryAt.has(`${q},${r}`)).toBe(false);
+        expect(hexDistance({ q, r }, { q: 0, r: 0 })).toBeLessThanOrEqual(BOARD_RADIUS);
+        expect(regionAt(q, r)).toBe(g);
+      }
+    }
+    // The lake keeps the goblin marsh apart from the hills; the ridge keeps the badlands off the arena.
+    expect(neighbours(getTerritory('t_mushroom')).map((t) => t.id)).not.toContain('t_fanghills');
+    expect(neighbours(getTerritory('t_ember')).map((t) => t.id)).not.toContain('t_arena');
+    // A territory's difficulty is how many battles away it is: it always borders an easier one.
+    for (const t of TERRITORIES) {
+      if (t.start || t.capital) continue;
+      expect(neighbours(t).some((n) => territoryTier(n) === territoryTier(t) - 1 || n.start)).toBe(true);
+    }
+    const seen = new Set([START_TERRITORY.id]);
+    const queue = [START_TERRITORY];
+    while (queue.length) for (const n of neighbours(queue.shift()!)) if (!seen.has(n.id)) seen.add(n.id), queue.push(n);
+    expect(seen.size).toBe(TERRITORIES.length);
   });
 
   it('has four factions plus the demon lord, and six special-building rewards', () => {
@@ -79,6 +111,47 @@ describe('world map', () => {
     expect(rec.liberated).toBe(false);
     expect(c.conquered).toEqual([START_TERRITORY.id]);
     expect(c.battles).toBe(1);
+  });
+});
+
+describe('star ratings', () => {
+  it('rates a win by the castle damage taken over all waves', () => {
+    expect(battleStars(0, 1000)).toBe(3);
+    expect(battleStars(100, 1000)).toBe(3);
+    expect(battleStars(101, 1000)).toBe(2);
+    expect(battleStars(499, 1000)).toBe(2);
+    expect(battleStars(500, 1000)).toBe(1);
+    expect(battleStars(3000, 1000)).toBe(1);
+  });
+
+  it('keeps the best rating and lets liberated territories be fought again', () => {
+    const c = newCampaign('human');
+    expect(isReplayable(c, START_TERRITORY.id)).toBe(false);
+    expect(isReplayable(c, 't_wheat')).toBe(false);
+    const first = recordBattle(c, 't_wheat', true, 10, 2);
+    expect(first).toMatchObject({ liberated: true, stars: 2, prevStars: 0 });
+    expect(isReplayable(c, 't_wheat')).toBe(true);
+    const worse = recordBattle(c, 't_wheat', true, 10, 1);
+    expect(worse.liberated).toBe(false);
+    expect(territoryStars(c, 't_wheat')).toBe(2);
+    recordBattle(c, 't_wheat', false, 4);
+    expect(territoryStars(c, 't_wheat')).toBe(2);
+    recordBattle(c, 't_wheat', true, 10, 3);
+    expect(territoryStars(c, 't_wheat')).toBe(3);
+    expect(c.conquered.filter((id) => id === 't_wheat')).toHaveLength(1);
+    expect(starTotal(c)).toEqual({ got: 3, max: (TERRITORIES.length - 1) * 3 });
+  });
+
+  it('gives territories liberated before star ratings their first star', () => {
+    const store = memoryStore();
+    const c = newCampaign('elf');
+    recordBattle(c, 't_wheat', true, 5);
+    const old = { ...c } as Partial<typeof c>;
+    delete old.stars;
+    store.setItem(SAVE_KEY, JSON.stringify(old));
+    const loaded = loadCampaign(store)!;
+    expect(territoryStars(loaded, 't_wheat')).toBe(1);
+    expect(territoryStars(loaded, START_TERRITORY.id)).toBe(0);
   });
 });
 

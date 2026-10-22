@@ -1,9 +1,22 @@
-import { campaignPerkDefs, campaignPerks, campaignUnlocks, isAttackable, isConquered, startingGold, type BattleRecord, type CampaignState } from '../game/campaign/campaign';
+import {
+  campaignPerkDefs,
+  campaignPerks,
+  campaignUnlocks,
+  isAttackable,
+  isConquered,
+  isReplayable,
+  STAR_RULES,
+  starTotal,
+  startingGold,
+  territoryStars,
+  type BattleRecord,
+  type CampaignState,
+} from '../game/campaign/campaign';
 import { getCampaignWave, territoryWaveCount } from '../game/campaign/campaignWaves';
 import { PERK_MAP } from '../game/campaign/perks';
 import { DEMON_LORD, LORE } from '../game/campaign/story';
 import { TERRAINS } from '../game/campaign/terrain';
-import { getTerritory, TERRITORIES, territoryTier, type Territory } from '../game/campaign/territories';
+import { getTerritory, REGIONS, TERRITORIES, territoryTier, WILD_KIND_NAME, type Territory } from '../game/campaign/territories';
 import { FACTIONS } from '../game/data/factions';
 import { getBuilding, getUnit, RACE_MAP } from '../game/data/index';
 import type { CutsceneFrame } from '../render/cutscene';
@@ -19,6 +32,10 @@ export interface CampaignActions {
   classic(): void;
   exit(): void;
   skipCutscene(): void;
+  /** A cutscene moment that wants a sound: an intertitle card or the finale's logo slam. */
+  cue(name: 'card' | 'slam'): void;
+  /** Plays the campaign's opening film again (from the title menu). */
+  replayIntro(): void;
   selectTerritory(id: string | null): void;
   attack(id: string): void;
   backToTitle(): void;
@@ -26,6 +43,50 @@ export interface CampaignActions {
 
 /** Characters revealed per second by the subtitle typewriter. */
 const TYPE_SPEED = 16;
+/** Seconds of the fade through black at the edges of each shot, and of an intertitle card's fades. */
+const SHOT_FADE = 0.5;
+const CARD_IN = 0.35;
+const CARD_OUT = 0.45;
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** An SVG ornament from path data, stroked in the current colour. */
+function ornament(cls: string, viewBox: string, paths: string[], dots: [number, number, number][] = []): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', cls);
+  svg.setAttribute('viewBox', viewBox);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-linecap', 'round');
+  for (const d of paths) {
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', d);
+    svg.append(p);
+  }
+  for (const [cx, cy, r] of dots) {
+    const c = document.createElementNS(SVG_NS, 'circle');
+    c.setAttribute('cx', String(cx));
+    c.setAttribute('cy', String(cy));
+    c.setAttribute('r', String(r));
+    c.setAttribute('fill', 'currentColor');
+    c.setAttribute('stroke', 'none');
+    svg.append(c);
+  }
+  return svg;
+}
+
+/** A corner flourish of the intertitle frame (drawn for the top-left corner, mirrored by CSS). */
+const corner = () =>
+  ornament(
+    'cc-corner',
+    '0 0 120 120',
+    ['M6 114V30Q6 6 30 6h84', 'M16 100V38q0-22 22-22h62', 'M16 70c0-30 14-46 40-48M70 16c-30 0-46 14-48 40', 'M30 30c10-10 26-6 24 6c-2 9-14 9-14 2c0-5 6-6 8-3'],
+    [[30, 30, 2.6], [84, 11, 1.6], [11, 84, 1.6]],
+  );
+/** The divider above and below an intertitle's line. */
+const fleuron = () =>
+  ornament('cc-fleuron', '0 0 160 24', ['M4 12h52M104 12h52', 'M80 4c-6 0-10 4-10 8s4 8 10 8s10-4 10-8s-4-8-10-8z', 'M70 12c-6-8-14-8-16 0c-2 6 6 8 8 3M90 12c6-8 14-8 16 0c2 6-6 8-8 3'], [[80, 12, 2.2]]);
 
 type Status = 'liberated' | 'attackable' | 'occupied';
 
@@ -52,11 +113,45 @@ function stars(n: number): HTMLElement {
   );
 }
 
+/** A territory's star rating: three stars, the earned ones gold (`fresh` ones pop in, one after another). */
+function rating(got: number, fresh = 0, size = 14): HTMLElement {
+  return h(
+    'span',
+    { class: 'rating', 'aria-label': `評價 ${got} / 3 星` },
+    Array.from({ length: 3 }, (_, k) =>
+      h('i', { class: `${k < got ? 'on' : ''} ${k >= got - fresh && k < got ? 'fresh' : ''}`, style: `--k:${k}` }, icon('star', size, k < got ? { fill: true } : { strokeWidth: 1.6 })),
+    ),
+  );
+}
+
+/** The three star conditions, each ticked when the best rating has reached it. */
+function starRules(best: number): HTMLElement {
+  return h(
+    'ul',
+    { class: 'star-rules' },
+    STAR_RULES.map((rule, k) => h('li', { class: k < best ? 'done' : '' }, icon(k < best ? 'check' : 'star', 13, { strokeWidth: 2.2 }), h('span', {}, `${'★'.repeat(k + 1)}　${rule}`))),
+  );
+}
+
 export class CampaignUi {
   private readonly menu = h('div', { class: 'overlay hidden' });
   private readonly cut = h('div', { class: 'cutscene-layer hidden' });
   private readonly subtitle = h('div', { class: 'subtitle-text' });
   private readonly dots = h('div', { class: 'shot-dots' });
+  private readonly chapter = h('div', { class: 'cut-chapter' });
+  private readonly fade = h('div', { class: 'cut-fade' });
+  private readonly cardEyebrow = h('div', { class: 'cc-eyebrow' });
+  private readonly cardText = h('p', { class: 'cc-text' });
+  private readonly card = h(
+    'div',
+    { class: 'cut-card hidden' },
+    h('div', { class: 'cc-frame' }, ['tl', 'tr', 'bl', 'br'].map((c) => h('i', { class: `cc-c ${c}` }, corner())), fleuron(), this.cardEyebrow, this.cardText, fleuron()),
+  );
+  private readonly slamTitle = h('b', {});
+  private readonly slamSub = h('small', {});
+  private readonly slam = h('div', { class: 'cut-slam hidden' }, h('i', { class: 'slam-flash' }), h('div', { class: 'slam-logo' }, this.slamTitle, h('span', { class: 'slam-rule' }), this.slamSub));
+  private slamShown = false;
+  private cutStart = 0;
   private readonly labels = h('div', { class: 'map-labels hidden' });
   private readonly legend = h(
     'div',
@@ -64,11 +159,15 @@ export class CampaignUi {
     h('span', {}, h('i', { class: 'lg-free' }), '已收復'),
     h('span', {}, h('i', { class: 'lg-attack' }), '可出征'),
     h('span', {}, h('i', { class: 'lg-enemy' }), '敵軍佔領'),
+    h('span', {}, h('i', { class: 'lg-wild' }), '森林・山脈・湖泊無法進入'),
+    h('span', { class: 'lg-hint' }, '滾輪縮放・拖曳移動'),
   );
   private readonly mapTop = h('div', { class: 'topbar hidden' });
   private readonly mapLeft = h('div', { class: 'panel left map-left hidden' });
   private readonly mapRight = h('div', { class: 'panel right map-right hidden' });
   private readonly labelEls = new Map<string, HTMLElement>();
+  /** Names of the wild regions, drawn over the map. */
+  private readonly regionEls = REGIONS.map((g) => h('span', { class: `region-label ${g.kind}` }, g.name, h('small', {}, WILD_KIND_NAME[g.kind])));
   private lastLine = -1;
 
   constructor(
@@ -76,14 +175,39 @@ export class CampaignUi {
     private readonly actions: CampaignActions,
     private readonly ui: Ui,
   ) {
-    const skip = h('button', { class: 'skip-btn', onclick: () => this.actions.skipCutscene() }, '跳過', icon('skip', 16, { strokeWidth: 2 }));
-    this.cut.append(h('div', { class: 'letterbox top' }), h('div', { class: 'letterbox bottom' }, this.subtitle, this.dots), skip);
+    const skip = h(
+      'button',
+      {
+        class: 'skip-btn',
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.actions.skipCutscene();
+        },
+      },
+      '跳過',
+      icon('skip', 16, { strokeWidth: 2 }),
+    );
+    const fx = h('div', { class: 'cut-fx', 'aria-hidden': 'true' }, h('i', { class: 'fx-grain' }), h('i', { class: 'fx-flick' }), h('i', { class: 'fx-vig' }));
+    this.cut.append(
+      this.fade,
+      fx,
+      h('div', { class: 'letterbox top' }, this.chapter),
+      h('div', { class: 'letterbox bottom' }, this.subtitle, this.dots),
+      this.card,
+      this.slam,
+      skip,
+    );
+    // A click anywhere skips too (after a moment, so the click that started the film doesn't).
+    this.cut.addEventListener('click', () => {
+      if (performance.now() - this.cutStart > 1000) this.actions.skipCutscene();
+    });
     for (const t of TERRITORIES) {
       const el = h('button', { class: 'map-label', type: 'button' });
       el.addEventListener('click', () => this.actions.selectTerritory(t.id));
       this.labelEls.set(t.id, el);
       this.labels.append(el);
     }
+    for (const el of this.regionEls) this.labels.append(el);
     root.append(this.labels, this.legend, this.mapTop, this.mapLeft, this.mapRight, this.cut, this.menu);
   }
 
@@ -108,7 +232,12 @@ export class CampaignUi {
 
   // ---------------------------------------------------------------- title
 
-  showTitleMenu(save: CampaignState | null, classicUnlocked: boolean): void {
+  /**
+   * The title screen. With `gate` (the first visit of a session) it opens on a press-start screen —
+   * browsers only allow sound after a gesture — then the logo slams in on a flash, `onStart` starts
+   * the fanfare and music on that beat, the logo glides to its place and the menu pops in row by row.
+   */
+  showTitleMenu(save: CampaignState | null, classicUnlocked: boolean, opts: { gate?: boolean; onStart?: () => void } = {}): void {
     this.hideAll();
     const item = (cls: string, iconName: IconName, label: string, sub: string, onclick: (() => void) | null, kbd?: string) =>
       h(
@@ -143,6 +272,7 @@ export class CampaignUi {
           classicUnlocked
             ? item('', 'sparkle', '無盡挑戰', '經典 30 波守城與無盡模式', () => this.actions.classic())
             : item('locked', 'lock', '無盡挑戰', '收復王城後解鎖經典 30 波守城', null),
+          save ? item('plain', 'replay', '重看開場動畫', '', () => this.actions.replayIntro()) : null,
           item('plain', 'exit', '離開', '', () => this.actions.exit()),
         ),
       ),
@@ -150,6 +280,66 @@ export class CampaignUi {
       save ? this.saveCard(save) : null,
     );
     this.openMenu(screen, 'title-overlay');
+    this.runTitle(screen, opts);
+  }
+
+  /** The title's entrance: press-start gate, logo slam and glide, then the menu cascade. */
+  private runTitle(screen: HTMLElement, opts: { gate?: boolean; onStart?: () => void }): void {
+    const col = screen.querySelector<HTMLElement>('.ts-col')!;
+    let k = 0;
+    for (const el of [...col.children, ...col.querySelectorAll('.ts-menu > *'), ...screen.querySelectorAll(':scope > .ts-foot, :scope > .save-card')]) {
+      if (!el.classList.contains('ts-menu')) (el as HTMLElement).style.setProperty('--i', String(k++));
+    }
+    const stage = (name: string) => {
+      screen.classList.remove('ts-wait', 'ts-slam', 'ts-in', 'ts-done', 'ts-quick');
+      screen.classList.add(name);
+    };
+    if (!opts.gate) {
+      stage('ts-quick');
+      return;
+    }
+    const touch = navigator.maxTouchPoints > 0 || matchMedia('(pointer: coarse)').matches;
+    const big = h('div', { class: 'ts-big', 'aria-hidden': 'true' }, h('b', {}, '迷你帝國'), h('span', {}, '王子的復國之戰'));
+    screen.append(
+      h(
+        'div',
+        { class: 'ts-gate' },
+        h('div', { class: 'ts-presents' }, '王國編年史・卷一'),
+        h('div', { class: 'ts-press' }, fleuron(), h('span', {}, touch ? '輕觸畫面開始' : '按任意鍵開始'), fleuron()),
+      ),
+      h('i', { class: 'ts-flash' }),
+      big,
+    );
+    stage('ts-wait');
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const start = (e: Event) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.removeEventListener('keydown', onKey, true);
+      screen.removeEventListener('pointerdown', start, true);
+      opts.onStart?.();
+      if (reduced) return stage('ts-done');
+      stage('ts-slam');
+      // The logo flies from the middle of the screen into the menu's title.
+      setTimeout(() => {
+        const logo = col.querySelector<HTMLElement>('.ts-logo')!;
+        const a = big.querySelector('b')!.getBoundingClientRect();
+        const b = logo.getBoundingClientRect();
+        stage('ts-in');
+        const anim = big.animate(
+          [{ transform: 'none' }, { transform: `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top + b.height / 2 - (a.top + a.height / 2)}px) scale(${b.height / a.height})`, opacity: 1 }],
+          { duration: 750, easing: 'cubic-bezier(.6,0,.2,1)', fill: 'forwards' },
+        );
+        anim.onfinish = () => screen.classList.add('ts-done');
+      }, 1100);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (!screen.isConnected) return window.removeEventListener('keydown', onKey, true);
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      start(e);
+    };
+    window.addEventListener('keydown', onKey, true);
+    screen.addEventListener('pointerdown', start, true);
   }
 
   private saveCard(save: CampaignState): HTMLElement {
@@ -167,7 +357,13 @@ export class CampaignUi {
         h('b', { class: 'sc-name' }, lore.kingdom),
         h('div', { class: 'muted small' }, `${lore.prince}・${r.name}・${save.capitalTaken ? `${lore.capital}已光復` : `目標：${lore.capital}`}`),
         progressSegments(save),
-        h('div', { class: 'kv small' }, h('span', {}, `已收復 ${save.conquered.length} / ${TERRITORIES.length}`), h('span', {}, `出征 ${save.battles} 次・勝 ${save.victories}`)),
+        h(
+          'div',
+          { class: 'kv small' },
+          h('span', {}, `已收復 ${save.conquered.length} / ${TERRITORIES.length}`),
+          h('span', { class: 'star-total' }, icon('star', 12, { fill: true }), `${starTotal(save).got} / ${starTotal(save).max}`),
+          h('span', {}, `勝 ${save.victories}`),
+        ),
       ),
     );
   }
@@ -207,22 +403,75 @@ export class CampaignUi {
   showCutscene(): void {
     this.hideAll();
     this.lastLine = -1;
-    this.subtitle.textContent = '';
-    this.cut.classList.remove('hidden');
+    this.slamShown = false;
+    this.cutStart = performance.now();
+    this.subtitle.replaceChildren();
+    this.chapter.replaceChildren();
+    this.card.classList.add('hidden');
+    this.slam.classList.add('hidden');
+    this.fade.style.opacity = '1';
+    this.cut.classList.remove('hidden', 'opening');
+    void this.cut.offsetWidth;
+    this.cut.classList.add('opening');
+  }
+
+  /** A new beat: the card or the shot's chapter heading, and its subtitle one character at a time. */
+  private startBeat(frame: CutsceneFrame): void {
+    const line = frame.line!;
+    this.lastLine = frame.index;
+    this.dots.replaceChildren(...Array.from({ length: frame.count }, (_, k) => h('span', { class: k === frame.index ? 'on' : k < frame.index ? 'done' : '' })));
+    const isCard = line.shot === 'card';
+    this.card.classList.toggle('hidden', !isCard);
+    this.subtitle.replaceChildren();
+    if (isCard) {
+      this.cardEyebrow.textContent = line.eyebrow ?? '';
+      this.cardText.textContent = line.text;
+      this.card.classList.remove('card-in');
+      void this.card.offsetWidth;
+      this.card.classList.add('card-in');
+      this.chapter.replaceChildren();
+      this.actions.cue('card');
+      return;
+    }
+    // Each character fades in on its own delay: no per-frame text updates.
+    this.subtitle.append(...[...line.text].map((ch, k) => h('span', { style: `animation-delay:${(k / TYPE_SPEED).toFixed(3)}s` }, ch)));
+    const [part, name] = (line.chapter ?? '').split('・');
+    this.chapter.replaceChildren(...(line.chapter ? [h('small', {}, part), h('b', {}, name ?? '')] : []));
+    this.chapter.classList.remove('in');
+    void this.chapter.offsetWidth;
+    this.chapter.classList.add('in');
   }
 
   updateCutscene(frame: CutsceneFrame): void {
-    if (!frame.line) return;
-    if (frame.index !== this.lastLine) {
-      this.lastLine = frame.index;
-      this.dots.replaceChildren(...Array.from({ length: frame.count }, (_, k) => h('span', { class: k === frame.index ? 'on' : k < frame.index ? 'done' : '' })));
+    const line = frame.line;
+    if (!line) return;
+    if (frame.index !== this.lastLine) this.startBeat(frame);
+    const t = frame.lineTime;
+    const left = line.duration - t;
+    if (line.shot === 'card') {
+      // Cards sit on black; they fade in and out themselves.
+      this.fade.style.opacity = '1';
+      this.card.style.opacity = String(Math.max(0, Math.min(1, t / CARD_IN, left / CARD_OUT)));
+      return;
     }
-    const shown = Math.floor(frame.lineTime * TYPE_SPEED);
-    const text = frame.line.text.slice(0, shown);
-    if (this.subtitle.textContent !== text) this.subtitle.textContent = text;
-    // Fade the subtitle out at the end of each shot.
-    const left = frame.line.duration - frame.lineTime;
-    this.subtitle.style.opacity = String(Math.min(1, left / 0.6, frame.lineTime / 0.3));
+    // Shots fade up from black and back down into it.
+    this.fade.style.opacity = String(Math.max(0, 1 - Math.min(t, left) / SHOT_FADE));
+    let sub = Math.min(1, left / 0.6, t / 0.3);
+    const slam = line.slam;
+    if (slam) {
+      // The subtitle clears the stage for the logo.
+      sub = Math.min(sub, Math.max(0, 1 - (t - (slam.at - 0.4)) / 0.3));
+      if (t >= slam.at && !this.slamShown) {
+        this.slamShown = true;
+        this.slamTitle.textContent = slam.title;
+        this.slamSub.textContent = slam.sub;
+        this.slam.classList.remove('hidden', 'go');
+        void this.slam.offsetWidth;
+        this.slam.classList.add('go');
+        this.actions.cue('slam');
+      }
+    }
+    this.subtitle.style.opacity = String(Math.max(0, sub));
   }
 
   // ---------------------------------------------------------------- world map
@@ -289,7 +538,7 @@ export class CampaignUi {
           : status === 'attackable'
             ? icon('swords', 12, { strokeWidth: 2.4 })
             : h('i', { class: 'dot' });
-      el.replaceChildren(mark, t.name);
+      el.replaceChildren(mark, t.name, ...(isReplayable(c, t.id) ? [rating(territoryStars(c, t.id), 0, 9)] : []));
       el.setAttribute('aria-label', `${t.name}（${status === 'liberated' ? '已收復' : status === 'attackable' ? '可出征' : '敵軍佔領'}）`);
     }
   }
@@ -338,8 +587,22 @@ export class CampaignUi {
     }
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, `地形・${terrain.name}`)), h('p', { class: 'small' }, terrain.effect));
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, '收復獎勵')), this.rewardCard(t));
+    if (t.faction) {
+      const best = territoryStars(c, t.id);
+      nodes.push(h('div', { class: 'sec-title' }, h('span', {}, '戰功評價'), rating(best)), starRules(best));
+    }
     if (status === 'liberated') {
       nodes.push(h('div', { class: 'status-pill good' }, icon('check', 16, { strokeWidth: 2.6 }), t.start ? '王子的據點' : '已收復'));
+      if (isReplayable(c, t.id) && territoryStars(c, t.id) < 3) {
+        nodes.push(
+          h(
+            'button',
+            { class: 'btn replay-btn', onclick: () => this.actions.attack(t.id) },
+            icon('replay', 18, { strokeWidth: 2 }),
+            h('span', {}, '再戰一次', h('small', {}, '爭取更高的戰功評價（不影響已收復的領地）')),
+          ),
+        );
+      }
     } else if (status === 'attackable') {
       nodes.push(
         h(
@@ -371,6 +634,13 @@ export class CampaignUi {
   }
 
   /** Repositions the territory labels over the 3D map. */
+  updateRegionLabels(positions: { x: number; y: number }[]): void {
+    positions.forEach((p, k) => {
+      const el = this.regionEls[k];
+      if (el) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -50%)`;
+    });
+  }
+
   updateLabels(positions: { id: string; x: number; y: number }[]): void {
     for (const p of positions) {
       const el = this.labelEls.get(p.id);
@@ -380,22 +650,25 @@ export class CampaignUi {
 
   // ---------------------------------------------------------------- results
 
-  showLiberated(c: CampaignState, id: string, kills: number, castlePct: number, onContinue: () => void): void {
+  showLiberated(c: CampaignState, id: string, rec: BattleRecord, kills: number, castleDamage: number, onContinue: () => void): void {
     const t = getTerritory(id);
+    const improved = rec.stars > rec.prevStars;
     const modal = ornate(
       h(
         'div',
         { class: 'modal narrow center decree', role: 'dialog', style: `--c:${RACE_MAP.get(c.race)!.color}` },
         medallion(t.capital ? 'crown' : 'flag', 'race'),
-        h('div', { class: 'eyebrow wide' }, '領地收復'),
+        h('div', { class: 'eyebrow wide' }, rec.liberated ? '領地收復' : '再次凱旋'),
         h('h1', { class: 'big' }, t.name),
-        h('p', { class: 'subtitle' }, `${t.name}的人民重獲自由，紛紛投入${LORE[c.race].prince}的麾下。`),
-        this.rewardCard(t),
+        h('div', { class: 'star-banner' }, rating(rec.stars, rec.stars, 34), improved && rec.prevStars > 0 ? h('span', { class: 'new-best' }, '新紀錄') : null),
+        starRules(rec.stars),
+        rec.liberated ? h('p', { class: 'subtitle' }, `${t.name}的人民重獲自由，紛紛投入${LORE[c.race].prince}的麾下。`) : null,
+        rec.liberated ? this.rewardCard(t) : null,
         h(
           'div',
           { class: 'tiles three' },
           h('div', { class: 'tile' }, h('b', { class: 'num' }, String(kills)), h('small', {}, '本場擊殺')),
-          h('div', { class: 'tile' }, h('b', { class: 'num' }, `${Math.round(castlePct * 100)}%`), h('small', {}, '主堡剩餘生命')),
+          h('div', { class: 'tile' }, h('b', { class: 'num' }, `${Math.round(castleDamage * 100)}%`), h('small', {}, '主堡累計受損')),
           h('div', { class: 'tile' }, h('b', { class: 'num' }, `${c.conquered.length} / ${TERRITORIES.length}`), h('small', {}, '已收復領地')),
         ),
         h('div', { class: 'modal-actions' }, h('button', { class: 'btn primary big', onclick: onContinue }, icon(t.capital ? 'crown' : 'map', 20), t.capital ? '見證王國光復' : '返回世界地圖')),

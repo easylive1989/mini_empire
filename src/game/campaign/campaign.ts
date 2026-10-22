@@ -16,6 +16,27 @@ export interface CampaignState {
   victories: number;
   kills: number;
   createdAt: number;
+  /** Best star rating per liberated territory (1–3); absent in older saves. */
+  stars?: Record<string, number>;
+}
+
+/** What each star of a territory battle asks for (castle damage counts every hit across all waves). */
+export const STAR_RULES = ['收復領地', '主堡累計受損少於最大生命的 50%', '主堡累計受損不超過最大生命的 10%'] as const;
+
+/** Stars for a won territory battle, from the castle damage taken over all its waves. */
+export function battleStars(castleDamage: number, castleMax: number): number {
+  const ratio = castleDamage / Math.max(1, castleMax);
+  return 1 + (ratio < 0.5 ? 1 : 0) + (ratio <= 0.1 ? 1 : 0);
+}
+
+export function territoryStars(c: CampaignState, id: string): number {
+  return c.stars?.[id] ?? 0;
+}
+
+/** Stars earned over the whole map, and the most there are (three for every territory but the refuge). */
+export function starTotal(c: CampaignState): { got: number; max: number } {
+  const fights = TERRITORIES.filter((t) => !t.start);
+  return { got: fights.reduce((n, t) => n + territoryStars(c, t.id), 0), max: fights.length * 3 };
 }
 
 export const SAVE_KEY = 'mini-empire.campaign.v1';
@@ -66,6 +87,8 @@ export function loadCampaign(store = defaultStore()): CampaignState | null {
     if (c.version !== 1 || !Array.isArray(c.conquered) || !RACE_MAP.has(c.race)) return null;
     c.conquered = c.conquered.filter((id) => TERRITORIES.some((t) => t.id === id));
     if (!c.conquered.includes(START_TERRITORY.id)) c.conquered.unshift(START_TERRITORY.id);
+    // Saves from before star ratings: every territory already liberated has its first star.
+    c.stars ??= Object.fromEntries(c.conquered.filter((id) => id !== START_TERRITORY.id).map((id) => [id, 1]));
     return c;
   } catch {
     return null;
@@ -107,6 +130,11 @@ export function isAttackable(c: CampaignState, id: string): boolean {
   return neighbours(getTerritory(id)).some((n) => isConquered(c, n.id));
 }
 
+/** A liberated territory (not the refuge) may be fought again for a better star rating. */
+export function isReplayable(c: CampaignState, id: string): boolean {
+  return isConquered(c, id) && !getTerritory(id).start;
+}
+
 export function campaignPerks(c: CampaignState): string[] {
   return c.conquered.map((id) => getTerritory(id).reward.perk).filter((p): p is string => !!p);
 }
@@ -146,15 +174,20 @@ export interface BattleRecord {
   liberated: boolean;
   capital: boolean;
   allLiberated: boolean;
+  /** Stars this battle earned, and the best the territory had before it. */
+  stars: number;
+  prevStars: number;
 }
 
 /** Records the result of a territory battle and returns what changed. */
-export function recordBattle(c: CampaignState, territoryId: string, won: boolean, kills: number): BattleRecord {
+export function recordBattle(c: CampaignState, territoryId: string, won: boolean, kills: number, stars = 1): BattleRecord {
   c.battles += 1;
   c.kills += kills;
-  const record: BattleRecord = { liberated: false, capital: false, allLiberated: false };
+  const prevStars = territoryStars(c, territoryId);
+  const record: BattleRecord = { liberated: false, capital: false, allLiberated: false, stars: won ? stars : 0, prevStars };
   if (!won) return record;
   c.victories += 1;
+  c.stars = { ...c.stars, [territoryId]: Math.max(prevStars, stars) };
   if (!isConquered(c, territoryId)) {
     c.conquered.push(territoryId);
     record.liberated = true;
