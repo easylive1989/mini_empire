@@ -119,7 +119,7 @@ const ENEMY_COLORS: Record<string, string> = {
 };
 
 /** Fallback dot colours for the campaign factions, by unit id prefix. */
-const FACTION_DOT: Record<string, string> = { g_: '#84cc16', o_: '#d97706', r_: '#f87171', b_: '#ef4444', sp: '#60a5fa' };
+const FACTION_DOT: Record<string, string> = { g_: '#84cc16', d_: '#f97316', o_: '#d97706', r_: '#f87171', b_: '#ef4444', sp: '#60a5fa' };
 const enemyColor = (u: UnitDef) => (u.boss ? '#c8452f' : (ENEMY_COLORS[u.id] ?? FACTION_DOT[u.id.slice(0, 2)] ?? '#aaa'));
 
 function pct(x: number): string {

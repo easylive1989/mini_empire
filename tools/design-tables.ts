@@ -38,6 +38,7 @@ const ARMIES: [string, string][] = [
   ['哥布林', 'g_'],
   ['獸人', 'o_'],
   ['叛軍', 'r_'],
+  ['惡魔', 'd_'],
   ['魔王', 'b_'],
 ];
 for (const [title, prefix] of ARMIES) {

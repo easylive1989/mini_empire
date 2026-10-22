@@ -58,7 +58,7 @@ const DECOR: Record<string, Item[]> = {
   t_royalcamp: [I('env', 'tent', -0.8, -0.4, 1.0, 0.4), I('env', 'tent', 0.9, -0.6, 1.0, -0.4), I('dungeon', 'sword_shield_gold', 0.1, 0.5, 0.9, 0, true), I('dungeon', 'banner_patternA_blue', -0.9, 0.9, 1.1, 0, true)],
   t_wailing: [I('halloween', 'crypt', 0, -0.4, 1.9), I('halloween', 'gravestone', -1, 0.6, 0.45), I('halloween', 'grave_A', 0.9, 0.7, 0.5), I('halloween', 'tree_dead_medium', 1.2, -0.7, 1.4, 0, true)],
   t_spring: [L('church', 0, -0.3, 1.6), I('dungeon', 'pillar_decorated', 1, 0.8, 1.0, 0, true), I('env', 'tree_single_A', -1.2, 0.7, 1.0)],
-  t_bonemarsh: [I('halloween', 'tree_dead_large', -0.5, -0.5, 1.6, 0, true), I('env', 'waterlily_A', 0.7, 0.4, 0.9), I('halloween', 'ribcage', 0.4, -0.9, 0.6), I('halloween', 'skull', -0.6, 0.9, 0.3)],
+  t_bonemarsh: [I('halloween', 'shrine_candles', -0.3, -0.4, 1.3, 0, true), I('env', 'rock_single_D', 0.8, 0.5, 0.8), I('halloween', 'tree_dead_medium', 0.7, -0.9, 1.3, 0, true), I('dungeon', 'torch_lit', -0.9, 0.8, 0.8, 0, true)],
   t_oblivion: [L('tower_B', 0.9, -0.9, 1.5), I('env', 'waterplant_A', -0.9, 0.8, 0.7)],
   t_capital: [L('castle', 0, -0.2, 3.0), I('env', 'wall_straight', -1.3, 0.9, 1.3, 0.5), I('env', 'wall_straight', 1.3, 0.9, 1.3, -0.5), I('dungeon', 'banner_patternA_red', 0, 1.3, 1.0, 0, true)],
 };

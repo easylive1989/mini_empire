@@ -54,6 +54,14 @@ const FACTION_WAVES: Record<Exclude<FactionId, 'demonlord'>, Mix[][]> = {
     [['r_assassin', 0.3], ['r_knight', 0.3, 2], ['r_mage', 0.4]],
     [['r_soldier', 0.4], ['r_knight', 0.3, 2], ['r_archer', 0.3]],
   ],
+  demon: [
+    [['d_imp', 0.7], ['d_berserker', 0.3]],
+    [['d_imp', 0.4], ['d_warlock', 0.4], ['d_berserker', 0.2]],
+    [['d_berserker', 0.45], ['d_cultist', 0.15], ['d_imp', 0.4]],
+    [['d_pitlord', 0.35, 3], ['d_warlock', 0.35], ['d_imp', 0.3]],
+    [['d_berserker', 0.35], ['d_cultist', 0.15], ['d_warlock', 0.25], ['d_imp', 0.25]],
+    [['d_pitlord', 0.3, 3], ['d_berserker', 0.3], ['d_cultist', 0.1], ['d_warlock', 0.3]],
+  ],
 };
 
 const CAPITAL_WAVES: Mix[][] = [
@@ -63,7 +71,7 @@ const CAPITAL_WAVES: Mix[][] = [
   [['m_warrior', 0.4], ['m_ghost', 0.3], ['m_necromancer', 0.3]],
   [['r_knight', 0.4], ['r_mage', 0.3], ['r_assassin', 0.3]],
   [['o_brute', 0.4], ['o_berserker', 0.3], ['o_spearman', 0.3]],
-  [['g_troll', 0.4], ['g_shaman', 0.2], ['g_thief', 0.4]],
+  [['d_berserker', 0.35], ['d_warlock', 0.3], ['d_pitlord', 0.2], ['d_cultist', 0.15]],
   [['m_darkknight', 0.4], ['m_necromancer', 0.3], ['m_mage', 0.3]],
   [['r_knight', 0.25], ['o_brute', 0.25], ['g_troll', 0.25], ['m_darkknight', 0.25]],
   [['o_berserker', 0.3], ['r_assassin', 0.3], ['m_ghost', 0.4]],
@@ -74,6 +82,7 @@ const FACTION_BOSS: Record<Exclude<FactionId, 'demonlord'>, (tier: number) => st
   goblin: () => 'g_king',
   orc: () => 'o_warlord',
   rebel: () => 'r_usurper',
+  demon: () => 'd_duke',
 };
 
 const WAVE_TITLES: Record<FactionId, string> = {
@@ -81,6 +90,7 @@ const WAVE_TITLES: Record<FactionId, string> = {
   goblin: '哥布林大軍',
   orc: '獸人戰團',
   rebel: '叛軍部隊',
+  demon: '深淵裂隙',
   demonlord: '王城決戰',
 };
 

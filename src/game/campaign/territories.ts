@@ -8,7 +8,7 @@ import type { TraitId } from './traits';
  * territories are neighbours only when their hexes touch.
  * The prince starts in the south-west; the fallen capital lies in the north-east. The straight road
  * (q + r = 0) goes through rebel land and one undead stronghold; the two flanks belong to the goblins
- * (q + r < 0) and the orcs (q + r > 0).
+ * (q + r < 0) and the orcs (q + r > 0); the demons hold the eastern approach to the capital.
  */
 export interface Territory {
   id: string;
@@ -50,8 +50,10 @@ export const TERRITORIES: Territory[] = [
   { id: 't_royalcamp', name: '王家舊營', q: 1, r: -1, faction: 'undead', terrain: 'plains', desc: '老國王最後一次點兵的營地，他的佩劍仍插在這裡。', trait: 'thorns', reward: { unlock: 'sp_monument' } },
   { id: 't_wailing', name: '哀嚎墓園', q: 0, r: -2, faction: 'undead', terrain: 'graveyard', desc: '戰死的王國士兵被魔王喚醒，在墓園中徘徊。', trait: 'airborne', reward: { perk: 'p_spawn' } },
   { id: 't_spring', name: '聖泉修道院', q: 1, r: -2, faction: 'undead', terrain: 'holy', desc: '被亡靈玷污的聖地，聖泉仍在微微發光。', trait: 'airborne', reward: { unlock: 'sp_spring' } },
-  { id: 't_bonemarsh', name: '枯骨沼澤', q: 2, r: 0, faction: 'undead', terrain: 'swamp', desc: '昔日的商路如今只剩白骨與爛泥。', trait: 'thorns', reward: { perk: 'p_income' } },
-  { id: 't_oblivion', name: '遺忘河谷', q: 2, r: -1, faction: 'undead', terrain: 'river', desc: '守護王城的河谷要塞，奪回它就能在家門口重建防線。', trait: 'armored', reward: { perk: 'p_startcastle' } },
+
+  // Demons: the Demon Lord's guard holds the eastern approach to the capital.
+  { id: 't_bonemarsh', name: '熔岩裂谷', q: 2, r: 0, faction: 'demon', terrain: 'badlands', desc: '昔日的商路被深淵裂隙撕開，岩漿從地底不斷湧出。', trait: 'thorns', reward: { perk: 'p_income' } },
+  { id: 't_oblivion', name: '遺忘河谷', q: 2, r: -1, faction: 'demon', terrain: 'river', desc: '守護王城的河谷要塞，如今由深淵公爵坐鎮。奪回它就能在家門口重建防線。', trait: 'armored', reward: { perk: 'p_startcastle' } },
 
   // The goal.
   { id: 't_capital', name: '淪陷的王城', q: 2, r: -2, faction: 'demonlord', terrain: 'capital', capital: true, desc: '老國王戰死之地。魔王莫爾加斯坐在染血的王座上。', reward: {} },

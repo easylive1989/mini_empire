@@ -1,6 +1,7 @@
 import { FINAL_WAVE } from '../constants';
 import { Rng } from '../rng';
 import type { UnitDef, WaveDef, WaveGroup } from '../types';
+import { FACTION_UNITS } from './factions';
 import { MONSTERS } from './monsters';
 
 /** Global difficulty knobs (tuned with `npm run balance`). */
@@ -59,7 +60,7 @@ const THEMES: Theme[] = [
 const ENDLESS_KINDS = ['m_minion', 'm_rogue', 'm_crossbow', 'm_warrior', 'm_ghost', 'm_bloater', 'm_mage', 'm_necromancer', 'm_brute', 'm_darkknight'];
 const ENDLESS_BOSSES = ['m_skeleton_king', 'm_lich', 'm_deathknight'];
 
-const MONSTER_MAP = new Map(MONSTERS.map((m) => [m.id, m]));
+const MONSTER_MAP = new Map([...MONSTERS, ...FACTION_UNITS].map((m) => [m.id, m]));
 
 /** Rough fighting value of one monster: sqrt(effective hp * dps). */
 export function unitThreat(u: UnitDef, hpMult = 1, dmgMult = 1): number {
