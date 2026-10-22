@@ -1,21 +1,23 @@
 import * as THREE from 'three';
 import { isAttackable, isConquered, type CampaignState } from '../game/campaign/campaign';
 import type { TerrainId } from '../game/campaign/terrain';
-import { BOARD_RADIUS, REGIONS, TERRITORIES, type Territory } from '../game/campaign/territories';
+import { HEX_DIRS } from '../game/campaign/hexTiles';
+import { REGIONS, TERRITORIES, type Territory } from '../game/campaign/territories';
+import { getWorld, provinceCentre, WORLD_SCALE } from '../game/campaign/world';
 import { FACTIONS } from '../game/data/factions';
 import { RACE_MAP } from '../game/data/index';
 import type { RaceId } from '../game/types';
 import { packItem, type Assets, type PackName } from './assets';
 import { PRESETS, type Quality } from './quality';
 import { buildingMaterial } from './recolor';
-import { buildWild, type Land } from './mapTerrain';
+import { Batch, buildWild, Painter, type Land } from './mapTerrain';
 import { addLights, clamp01, ease, hexToWorld, puffTexture, SoftParticles } from './sceneKit';
 import type { ViewInsets } from './world';
 
 export type TerritoryStatus = 'liberated' | 'attackable' | 'occupied';
 
-/** Hex circumradius of one territory on the map. */
-const SIZE = 2.4;
+/** Hex apothem of one fine hex of the map (a territory is a province of several). */
+const SIZE = 1.6;
 const HEX_R = SIZE * 1.1547;
 
 const TINT: Record<TerrainId, string> = {
@@ -32,7 +34,6 @@ const TINT: Record<TerrainId, string> = {
   river: '#b5e3a0',
   capital: '#a08680',
 };
-const ELEVATION: Partial<Record<TerrainId, number>> = { hills: 0.25, mountain: 0.45, mine: 0.2, capital: 0.15 };
 const OCCUPIED_SHADE = new THREE.Color('#4a3550');
 
 /** One placed model: landmark buildings get the race colours once liberated, the dark ones before. */
@@ -107,7 +108,7 @@ export class MapView {
   /** Where each named wild region's label sits: the middle of its cells. */
   private readonly regionCenters = REGIONS.map((g) => {
     const c = new THREE.Vector3();
-    for (const [q, r] of g.cells) c.add(hexToWorld(q, r, SIZE));
+    for (const [q, r] of g.cells) c.add(hexToWorld(q * WORLD_SCALE, r * WORLD_SCALE, SIZE));
     return c.divideScalar(g.cells.length);
   });
   private readonly fog = new THREE.Fog('#1d1622', 60, 140);
@@ -138,13 +139,15 @@ export class MapView {
   constructor(private readonly assets: Assets) {
     this.scene.add(this.root, this.particles.points);
     this.scene.fog = this.fog;
-    this.lights = addLights(this.scene, 52);
+    this.lights = addLights(this.scene, 64);
     this.lights.sun.position.set(-24, 50, 30);
-    this.lights.sun.shadow.camera.far = 160;
+    this.lights.sun.shadow.camera.far = 180;
     this.capitalGlow.position.set(0, 3, 0);
     this.scene.add(this.capitalGlow);
-    // The realm's extent on the ground, for the camera.
-    const pts = TERRITORIES.map((t) => this.territoryPos(t));
+    // The realm's extent on the ground (every province hex), for the camera.
+    const pts = getWorld()
+      .cells.filter((c) => c.owner)
+      .map((c) => hexToWorld(c.q, c.r, SIZE));
     const box = new THREE.Box3().setFromPoints(pts);
     box.getCenter(this.realm.center);
     this.realm.half.set((box.max.x - box.min.x) / 2 + HEX_R, (box.max.z - box.min.z) / 2 + HEX_R);
@@ -152,7 +155,8 @@ export class MapView {
   }
 
   private territoryPos(t: Territory): THREE.Vector3 {
-    return hexToWorld(t.q, t.r, SIZE);
+    const c = provinceCentre(t);
+    return hexToWorld(c.q, c.r, SIZE);
   }
 
   /** (Re)builds the land; the light preset gets fewer props far out. */
@@ -165,7 +169,7 @@ export class MapView {
         (m.material as THREE.Material).dispose();
       }
     }
-    this.land = buildWild(this.assets, SIZE, BOARD_RADIUS, lite);
+    this.land = buildWild(this.assets, SIZE, lite);
     this.landLite = lite;
     this.root.add(this.land.group);
     this.moodKey = -1;
@@ -222,29 +226,29 @@ export class MapView {
   private build(race: RaceId): void {
     for (const n of this.nodes.values()) this.root.remove(n.group);
     this.nodes.clear();
-    const grass = packItem(this.assets, 'env', 'hex_grass');
-    const river = packItem(this.assets, 'env', 'hex_river_A');
-    const ringGeo = new THREE.RingGeometry(HEX_R * 0.86, HEX_R * 0.97, 6, 1, Math.PI / 2);
+    const world = getWorld();
     for (const t of TERRITORIES) {
       const group = new THREE.Group();
       group.position.copy(this.territoryPos(t));
-      const elev = ELEVATION[t.terrain] ?? 0;
-      const tileObj = (t.terrain === 'river' ? river : grass).clone();
-      tileObj.scale.set(SIZE * 0.985, 1 + elev, SIZE * 0.985);
-      tileObj.position.y = elev;
-      const tiles: THREE.Mesh[] = [];
+      const elev = 0;
+      // The province: its hexes (roads, rivers and shores joined up) and the farms, woods or rocks of
+      // its land, merged into meshes of its own so the whole province darkens and lights up together.
+      const paint = new Painter(this.assets, SIZE, group.position.clone());
+      const ground = new Batch();
+      const props = new Batch();
+      for (const c of world.provinces.get(t.id)!) {
+        paint.tile(ground, c, TINT[t.terrain], 0);
+        if (!c.centre) paint.props(props, c, c.kind, 0, { settled: true });
+      }
+      const tiles = [...ground.build({ cast: false, receive: true }), ...props.build({ cast: true, receive: true })];
       const tileMats: THREE.MeshStandardMaterial[] = [];
-      tileObj.traverse((m) => {
-        const mesh = m as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
-        mat.userData.base = new THREE.Color(TINT[t.terrain]);
-        mesh.material = mat;
+      for (const mesh of tiles) {
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        mat.userData.base = new THREE.Color('#ffffff');
         mesh.userData.territory = t.id;
-        tiles.push(mesh);
         tileMats.push(mat);
-      });
-      group.add(tileObj);
+        group.add(mesh);
+      }
 
       const deco = new THREE.Group();
       deco.position.y = elev;
@@ -259,26 +263,25 @@ export class MapView {
       }
 
       const { flag, cloth } = this.makeFlag();
-      flag.position.set(-1.45, 0, -0.75);
+      flag.position.set(-1.45 * (SIZE / 2.4), 0, -0.75 * (SIZE / 2.4));
       deco.add(flag);
 
       const ringMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
-      const ring = new THREE.Mesh(ringGeo, ringMat);
-      ring.rotation.x = -Math.PI / 2;
-      ring.position.y = elev + 0.04;
+      const ring = new THREE.Mesh(this.outline(t.id, group.position), ringMat);
+      ring.position.y = 0.05;
       ring.renderOrder = 3;
       group.add(ring);
 
       const puffs: THREE.Sprite[] = [];
-      const count = t.capital ? 9 : 4;
+      const count = t.capital ? 12 : 6;
       for (let k = 0; k < count; k++) {
         const sp = new THREE.Sprite(
           new THREE.SpriteMaterial({ map: puffTexture(), color: t.capital ? '#3b0d2e' : '#1e1028', transparent: true, opacity: 0, depthWrite: false }),
         );
         sp.userData.phase = Math.random() * Math.PI * 2;
-        sp.userData.radius = 0.4 + Math.random() * 1.1;
+        sp.userData.radius = 0.4 + Math.random() * SIZE * 2;
         sp.userData.height = 0.9 + Math.random() * (t.capital ? 2.5 : 1.1);
-        sp.userData.scale = (t.capital ? 2.4 : 1.7) + Math.random() * 1.2;
+        sp.userData.scale = (t.capital ? 2.6 : 2) + Math.random() * 1.4;
         sp.renderOrder = 4;
         group.add(sp);
         puffs.push(sp);
@@ -305,6 +308,27 @@ export class MapView {
       if (t.capital) this.capitalGlow.position.set(group.position.x, 3.2, group.position.z);
     }
     this.race = race;
+  }
+
+  /** A band just inside the edge of a province, where it meets other land: its border. */
+  private outline(id: string, origin: THREE.Vector3): THREE.BufferGeometry {
+    const world = getWorld();
+    const pos: number[] = [];
+    const outer = HEX_R * 0.98;
+    const inner = outer - 0.16;
+    for (const c of world.provinces.get(id)!) {
+      const at = hexToWorld(c.q, c.r, SIZE).sub(origin);
+      HEX_DIRS.forEach(([dq, dr], d) => {
+        if (world.at(c.q + dq, c.r + dr)?.owner === id) return;
+        // The edge facing direction d runs between the corners 30° either side of it.
+        const corner = (deg: number, rad: number) => [at.x + Math.cos((deg * Math.PI) / 180) * rad, at.z + Math.sin((deg * Math.PI) / 180) * rad];
+        const [o0, o1, i0, i1] = [corner(d * 60 - 30, outer), corner(d * 60 + 30, outer), corner(d * 60 - 30, inner), corner(d * 60 + 30, inner)];
+        for (const [x, z] of [o0, o1, i1, o0, i1, i0]) pos.push(x, 0, z);
+      });
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    return g;
   }
 
   // ---------------------------------------------------------------- state
@@ -475,7 +499,8 @@ export class MapView {
     for (const n of this.nodes.values()) {
       const p = n.group.position.clone();
       p.y = n.elev + 0.1;
-      p.z += HEX_R * 0.62;
+      // Just below the centre hex, so the name does not hide the town.
+      p.z += SIZE * 1.9;
       const v = p.project(this.camera);
       out.push({ id: n.t.id, x: ((v.x + 1) / 2) * this.width, y: ((1 - v.y) / 2) * this.height });
     }
@@ -540,7 +565,7 @@ export class MapView {
       });
       if (emit && dark > 0.5 && Math.random() < (n.t.capital ? 0.9 : 0.12)) {
         const a = Math.random() * Math.PI * 2;
-        const r = Math.random() * HEX_R * 0.7;
+        const r = Math.random() * SIZE * 3;
         const at = n.group.position.clone().add(new THREE.Vector3(Math.cos(a) * r, n.elev + 0.3, Math.sin(a) * r));
         this.particles.emit(at, new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.8 + Math.random(), (Math.random() - 0.5) * 0.3), new THREE.Color(n.t.capital ? '#ff4d4d' : '#ff8a3d'), 0.22, 2.4, -0.1);
       }
@@ -555,6 +580,10 @@ export class MapView {
       } else if (n.status === 'liberated') {
         color = raceColor;
         opacity = 0.45;
+      } else if (n.t.faction) {
+        // Occupied land shows whose it is.
+        color = FACTIONS[n.t.faction].color;
+        opacity = 0.4;
       }
       if (hov) opacity = Math.max(opacity, 0.75);
       if (sel) {

@@ -141,7 +141,14 @@ async function main() {
     'trees_A_large', 'trees_B_large', 'tree_single_A_cut', 'hill_single_C', 'hills_A_trees', 'hills_B', 'mountain_A',
     'mountain_C_grass', 'waterlily_A', 'waterplant_A', 'waterplant_B',
   ];
-  const tiles = ['hex_grass', 'hex_water', 'hex_coast_A', 'hex_road_A', 'hex_river_A'];
+  // Every road and river piece (straight, bends, forks, crossings) and the shore pieces, so the world
+  // map can join roads, rivers and coastlines across tiles.
+  const tiles = [
+    'hex_grass', 'hex_water',
+    ...['A', 'B', 'C', 'D'].map((x) => `hex_coast_${x}`),
+    ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'].map((x) => `hex_road_${x}`),
+    ...['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'crossing_A', 'crossing_B'].map((x) => `hex_river_${x}`),
+  ];
   const neutral = [
     'building_scaffolding', 'building_destroyed', 'building_grain', 'building_dirt',
     'projectile_catapult', 'fence_wood_straight', 'fence_stone_straight', 'wall_straight', 'wall_straight_gate',

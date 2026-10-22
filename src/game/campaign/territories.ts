@@ -78,12 +78,13 @@ export function territoryTier(t: Territory): number {
 /** Radius of the world map's board. */
 export const BOARD_RADIUS = 7;
 
-export type WildKind = 'forest' | 'mountains' | 'lake' | 'hills' | 'marsh' | 'badlands' | 'blight' | 'meadow';
+export type WildKind = 'forest' | 'mountains' | 'lake' | 'sea' | 'hills' | 'marsh' | 'badlands' | 'blight' | 'meadow';
 
 export const WILD_KIND_NAME: Record<WildKind, string> = {
   forest: '森林',
   mountains: '山脈',
   lake: '湖泊',
+  sea: '海',
   hills: '丘陵',
   marsh: '沼地',
   badlands: '荒地',
