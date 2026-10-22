@@ -399,6 +399,24 @@ function buildCamp(add: Placer, rng: Rng, faction: FactionId): void {
         add('env', 'fence_wood_straight', X + 3.5, side * 10.7, 2.2, Math.PI / 2);
       }
       break;
+    case 'demon':
+      add('halloween', 'shrine', X + 9, 0, 1.1, -Math.PI / 2);
+      add('halloween', 'arch_gate', X + 3.5, 0, 0.8, Math.PI / 2);
+      sideRows(
+        [
+          ['halloween', 'shrine_candles', 0.9],
+          ['dungeon', 'torch_lit', 1.6],
+          ['env', 'rock_single_D', 2.6],
+          ['halloween', 'post_skull', 0.9],
+          ['halloween', 'bone_A', 1],
+          ['env', 'rock_single_A', 2.4],
+        ],
+        18,
+      );
+      add('dungeon', 'banner_patternA_red', X + 4, -4.5, 1.5, 0);
+      add('dungeon', 'banner_patternA_red', X + 4, 4.5, 1.5, 0);
+      for (let k = 0; k < 6; k++) add('halloween', ['tree_dead_large', 'tree_dead_small'][k % 2], X - 2 + rng.next() * 14, (k % 2 ? 1 : -1) * (12 + rng.next() * 8), 0.8);
+      break;
     case 'demonlord':
       add('halloween', 'crypt', X + 10, 0, 0.7, -Math.PI / 2);
       add('halloween', 'arch_gate', X + 3.5, 0, 0.9, Math.PI / 2);

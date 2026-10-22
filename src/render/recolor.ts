@@ -106,6 +106,12 @@ export const PALETTES: Record<string, Palette> = {
   rebel: { team: '#57534e', accent: '#9f1239' },
   assassin: { team: '#1f2937', accent: '#9f1239' },
   usurper: { team: '#581c87', accent: '#facc15', emissive: '#12001f' },
+  imp: { team: '#7f1d1d', accent: '#f97316', skin: '#e0362f' },
+  demon: { team: '#3f0a0a', accent: '#f97316', skin: '#b91c1c' },
+  warlock: { team: '#6d28d9', accent: '#22c55e', skin: '#b91c1c' },
+  pitlord: { team: '#1c1917', accent: '#f97316', skin: '#991b1b', tint: '#e8c0b0' },
+  cultist: { team: '#7f1d1d', accent: '#111827', skin: '#b91c1c' },
+  duke: { team: '#1c1917', accent: '#facc15', skin: '#7f1d1d', tint: '#e8b8a0', emissive: '#2a0600' },
   demonlord: { team: '#0c0a09', accent: '#f97316', skin: '#7f1d1d', tint: '#e5b8a8', emissive: '#3a0800' },
   mercenary: { team: '#92400e', accent: '#d6d3d1' },
 };

@@ -73,9 +73,9 @@ describe('world map', () => {
     expect(seen.size).toBe(TERRITORIES.length);
   });
 
-  it('has four factions plus the demon lord, and six special-building rewards', () => {
+  it('has five factions plus the demon lord, and six special-building rewards', () => {
     const factions = new Set(TERRITORIES.map((t) => t.faction).filter(Boolean));
-    expect([...factions].sort()).toEqual(['demonlord', 'goblin', 'orc', 'rebel', 'undead']);
+    expect([...factions].sort()).toEqual(['demon', 'demonlord', 'goblin', 'orc', 'rebel', 'undead']);
     const unlocks = TERRITORIES.map((t) => t.reward.unlock).filter(Boolean);
     expect(unlocks).toHaveLength(6);
     for (const u of unlocks) expect(BUILDINGS.get(u!)?.campaignOnly).toBe(true);
@@ -299,6 +299,34 @@ describe('faction mechanics', () => {
     expect(boss.enraged).toBe(true);
     expect(b.entities.filter((e) => e.def.id === 'o_berserker').length).toBe(3);
     expect(b.entities.length).toBe(before + 3);
+  });
+
+  it('demons hold two territories, field pit lords from tier 3 and end with the abyssal duke', () => {
+    const lands = TERRITORIES.filter((t) => t.faction === 'demon');
+    expect(lands.length).toBeGreaterThanOrEqual(2);
+    for (const t of lands) {
+      const n = territoryWaveCount(t.id);
+      expect(getCampaignWave(t.id, n).boss).toBe('d_duke');
+      for (let w = 1; w < n; w++) for (const g of getCampaignWave(t.id, w).groups) expect(g.unit.startsWith('d_')).toBe(true);
+      expect(getCampaignWave(t.id, 4).groups.some((g) => g.unit === 'd_pitlord')).toBe(territoryTier(t) >= 3);
+    }
+  });
+
+  it('the abyssal duke enrages below half health and opens the rift for pit lords', () => {
+    const b = level('t_oblivion');
+    const boss = b.spawnEnemy('d_duke');
+    b.damageEntity(boss, boss.maxHp * 0.6, 'magic', {});
+    expect(boss.enraged).toBe(true);
+    expect(b.entities.filter((e) => e.def.id === 'd_pitlord').length).toBe(2);
+  });
+
+  it('imps explode when they die', () => {
+    const b = level('t_bonemarsh');
+    const imp = b.spawnEnemy('d_imp');
+    const events = b.events.length;
+    b.damageEntity(imp, imp.maxHp * 2, 'magic', {});
+    expect(imp.alive).toBe(false);
+    expect(b.events.slice(events).some((e) => e.type === 'explode')).toBe(true);
   });
 
   it('orc shaman war cries do not stack', () => {
