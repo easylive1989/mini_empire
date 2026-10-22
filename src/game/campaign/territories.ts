@@ -32,19 +32,19 @@ export const TERRITORIES: Territory[] = [
   { id: 't_wheat', name: '麥浪平原', q: -1, r: 1, faction: 'rebel', terrain: 'plains', desc: '王國的糧倉，如今被叛軍強徵。', reward: { perk: 'p_gold' } },
   { id: 't_greystone', name: '灰岩鎮', q: -2, r: 1, faction: 'rebel', terrain: 'town', desc: '石匠之鎮，鎮民被叛軍奴役修築工事。', reward: { perk: 'p_castle' } },
   { id: 't_caravan', name: '商隊驛站', q: -1, r: 2, faction: 'rebel', terrain: 'town', desc: '往來商旅聚集之地，叛軍在這裡招募傭兵。', reward: { unlock: 'sp_mercenary' } },
-  { id: 't_ravenhold', name: '黑鴉堡', q: 0, r: 0, faction: 'rebel', terrain: 'hills', desc: '篡位叛臣的大本營，扼守通往王城的大道。', reward: { perk: 'p_tower' } },
+  { id: 't_ravenhold', name: '黑鴉堡', q: 0, r: 0, faction: 'rebel', terrain: 'hills', desc: '篡位叛臣的大本營，扼守通往王城的大道。', trait: 'shieldwall', reward: { perk: 'p_tower' } },
 
   // Goblins: the forested western flank.
   { id: 't_whisper', name: '幽語森林', q: -3, r: 1, faction: 'goblin', terrain: 'forest', desc: '樹影間迴盪著哥布林的竊笑聲。', reward: { perk: 'p_range' } },
   { id: 't_goblincave', name: '哥布林窟', q: -1, r: 0, faction: 'goblin', terrain: 'hills', desc: '哥布林工匠在洞窟裡打造危險的火箭。', trait: 'raiders', reward: { unlock: 'sp_rocket' } },
-  { id: 't_mushroom', name: '蘑菇沼澤', q: -3, r: 0, faction: 'goblin', terrain: 'swamp', desc: '長滿巨大蘑菇的沼地，盛產珍貴藥草。', reward: { perk: 'p_heal' } },
+  { id: 't_mushroom', name: '蘑菇沼澤', q: -3, r: 0, faction: 'goblin', terrain: 'swamp', desc: '長滿巨大蘑菇的沼地，盛產珍貴藥草。', trait: 'shieldwall', reward: { perk: 'p_heal' } },
   { id: 't_fanghills', name: '碎牙丘陵', q: 0, r: -1, faction: 'goblin', terrain: 'hills', desc: '哥布林王堆滿搶來的金銀財寶的巢穴。', trait: 'raiders', reward: { perk: 'p_bounty' } },
 
   // Orcs: the scorched eastern flank.
-  { id: 't_ember', name: '赤焰荒原', q: -1, r: 3, faction: 'orc', terrain: 'badlands', desc: '終年燃燒的荒原，獸人戰團在此集結。', reward: { perk: 'p_dmg' } },
+  { id: 't_ember', name: '赤焰荒原', q: -1, r: 3, faction: 'orc', terrain: 'badlands', desc: '終年燃燒的荒原，獸人戰團在此集結。', trait: 'shieldwall', reward: { perk: 'p_dmg' } },
   { id: 't_arena', name: '獸人鬥技場', q: 0, r: 1, faction: 'orc', terrain: 'badlands', desc: '最強的獸人勇士在這裡廝殺取樂。', trait: 'thorns', reward: { unlock: 'sp_arena' } },
   { id: 't_frostfang', name: '霜牙山口', q: 1, r: 1, faction: 'orc', terrain: 'mountain', desc: '寒風刺骨的山口，獸人在此打造鐵甲。', trait: 'thorns', reward: { perk: 'p_hp' } },
-  { id: 't_oldvein', name: '古老礦脈', q: 1, r: 0, faction: 'orc', terrain: 'mine', desc: '矮人留下的古老礦坑，蘊藏大量黃金。', reward: { unlock: 'sp_deepmine' } },
+  { id: 't_oldvein', name: '古老礦脈', q: 1, r: 0, faction: 'orc', terrain: 'mine', desc: '矮人留下的古老礦坑，蘊藏大量黃金。', trait: 'shieldwall', reward: { unlock: 'sp_deepmine' } },
 
   // Undead: the blighted lands around the capital.
   { id: 't_royalcamp', name: '王家舊營', q: 1, r: -1, faction: 'undead', terrain: 'plains', desc: '老國王最後一次點兵的營地，他的佩劍仍插在這裡。', trait: 'thorns', reward: { unlock: 'sp_monument' } },

@@ -5,6 +5,7 @@ import { createLevelState, newCampaign } from '../src/game/campaign/campaign';
 import { getCampaignWave, territoryWaveCount } from '../src/game/campaign/campaignWaves';
 import { TERRITORIES } from '../src/game/campaign/territories';
 import { TRAITS } from '../src/game/campaign/traits';
+import { DOCTRINE_MULT, doctrineMult, doctrineOf } from '../src/game/campaign/doctrines';
 import { BUILDINGS, getUnit } from '../src/game/data/index';
 import { getModifiers } from '../src/game/state';
 
@@ -66,5 +67,44 @@ describe('battle traits', () => {
     expect(analyzeWave(s, waveForState(s)).find((t) => t.id === 'thorns')?.severity).toBe('warn');
     const armored = createLevelState(newCampaign('human'), 't_oblivion', 1);
     expect(analyzeWave(armored, waveForState(armored)).find((t) => t.id === 'armor')?.count).toBeGreaterThan(5);
+  });
+});
+
+describe('war doctrines', () => {
+  it('split the roster into melee and ranged halves', () => {
+    expect(doctrineOf(BUILDINGS.get('human_b_militia')!)).toBe('front');
+    expect(doctrineOf(BUILDINGS.get('human_b_archer')!)).toBe('ranged');
+    expect(doctrineOf(BUILDINGS.get('dwarf_cannon')!)).toBe('ranged');
+    expect(doctrineOf(BUILDINGS.get('gold_mine')!)).toBeNull();
+    expect(doctrineMult(BUILDINGS.get('human_b_militia'), 'front')).toBe(DOCTRINE_MULT.chosen);
+    expect(doctrineMult(BUILDINGS.get('human_b_militia'), 'ranged')).toBe(DOCTRINE_MULT.other);
+    expect(doctrineMult(BUILDINGS.get('human_b_militia'), undefined)).toBe(1);
+  });
+
+  it('start each battle with the doctrine picked on the map', () => {
+    const c = newCampaign('elf');
+    expect(createLevelState(c, 't_wheat', 1).level!.doctrine).toBe('front');
+    c.doctrine = 'ranged';
+    expect(createLevelState(c, 't_wheat', 1).level!.doctrine).toBe('ranged');
+  });
+
+  it('make the chosen soldiers stronger in battle', () => {
+    const strength = (doctrine: 'front' | 'ranged') => {
+      const s = createLevelState(newCampaign('human'), 't_wheat', 3, doctrine);
+      s.phase = 'battle';
+      const b = new Battle(s);
+      return b.spawnPlayerUnit({ ...b.castle, level: 1, def: BUILDINGS.get('human_b_militia')! } as never).maxHp;
+    };
+    expect(strength('front')).toBeGreaterThan(strength('ranged'));
+  });
+
+  it('shield walls blunt ranged attacks but not melee', () => {
+    const b = battleIn('t_ravenhold');
+    const foe = b.spawnEnemy('r_soldier');
+    const militia = soldier(b, 'human_militia');
+    const archer = soldier(b, 'human_archer');
+    const melee = b.damageEntity(foe, 20, 'magic', { entity: militia }, { canDodge: false });
+    const ranged = b.damageEntity(foe, 20, 'magic', { entity: archer }, { canDodge: false });
+    expect(ranged).toBeCloseTo(melee / 2);
   });
 });

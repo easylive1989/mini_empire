@@ -18,6 +18,7 @@ import {
 import { PERK_MAP } from './campaign/perks';
 import { TERRAINS, type TerrainId } from './campaign/terrain';
 import { TRAITS, type TraitId } from './campaign/traits';
+import type { DoctrineId } from './campaign/doctrines';
 import { BOONS, BOON_MAP } from './data/boons';
 import { BUILDINGS, getBuilding, RACE_MAP, raceBuildings, sortBuildings } from './data/index';
 import { Rng } from './rng';
@@ -84,6 +85,8 @@ export interface LevelInfo {
   terrain: TerrainId;
   totalWaves: number;
   trait?: TraitId;
+  /** War doctrine picked for this battle (see campaign/doctrines.ts). */
+  doctrine?: DoctrineId;
 }
 
 /**
@@ -201,6 +204,7 @@ export function baseModifiers(): Modifiers {
     enemyEvasionAdd: 0,
     enemyArmorAdd: 0,
     enemyThorns: 0,
+    enemyRangedResist: 0,
   };
 }
 

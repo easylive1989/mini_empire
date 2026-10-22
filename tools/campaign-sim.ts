@@ -4,7 +4,7 @@
 // `adaptive` reads each wave preview and builds counters; `mono` spams one combat building. Both take the full route.
 // `lazy` takes the straight road with level-1 starter barracks only and should fail by tier 2-3.
 import { simulateBattle } from '../src/game/battle';
-import { adaptivePrepare, botPrepare, lazyPrepare, monoPrepare } from '../src/game/bot';
+import { adaptivePrepare, botDoctrine, botPrepare, lazyPrepare, monoPrepare } from '../src/game/bot';
 import { createLevelState, isAttackable, newCampaign, recordBattle, type CampaignState } from '../src/game/campaign/campaign';
 import { CAPITAL_TERRITORY, TERRITORIES, territoryTier } from '../src/game/campaign/territories';
 import { RACES } from '../src/game/data/index';
@@ -58,6 +58,7 @@ function run(race: (typeof RACES)[number]['id'], strategy: Strategy): string {
       : [...TERRITORIES.filter((t) => !t.start && !t.capital).sort((a, b) => territoryTier(a) - territoryTier(b)).map((t) => t.id), CAPITAL_TERRITORY.id];
   for (const id of order) {
     if (!isAttackable(c, id)) continue;
+    c.doctrine = botDoctrine(race, id, strategy === 'adaptive' ? 'adaptive' : strategy === 'mono' ? 'mono' : 'fixed');
     const m = margin(c, id, prepare);
     let tries = 0;
     let res = playLevel(c, id, 1, 1, prepare);

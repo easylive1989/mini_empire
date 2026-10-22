@@ -3,6 +3,7 @@ import { castleMaxHp, CAMPAIGN_ECONOMY, newGame, type GameState } from '../state
 import { RACE_MAP } from '../data/index';
 import type { RaceId } from '../types';
 import { territoryWaveCount } from './campaignWaves';
+import type { DoctrineId } from './doctrines';
 import { PERK_MAP, type PerkDef } from './perks';
 import { CAPITAL_TERRITORY, getTerritory, neighbours, START_TERRITORY, TERRITORIES, territoryTier } from './territories';
 
@@ -18,6 +19,8 @@ export interface CampaignState {
   createdAt: number;
   /** Best star rating per liberated territory (1–3); absent in older saves. */
   stars?: Record<string, number>;
+  /** War doctrine last picked on the map; the next battle starts with it. */
+  doctrine?: DoctrineId;
 }
 
 /** What each star of a territory battle asks for (castle damage counts every hit across all waves). */
@@ -88,6 +91,7 @@ export function loadCampaign(store = defaultStore()): CampaignState | null {
     c.conquered = c.conquered.filter((id) => TERRITORIES.some((t) => t.id === id));
     if (!c.conquered.includes(START_TERRITORY.id)) c.conquered.unshift(START_TERRITORY.id);
     // Saves from before star ratings: every territory already liberated has its first star.
+    if (c.doctrine !== 'front' && c.doctrine !== 'ranged') delete c.doctrine;
     c.stars ??= Object.fromEntries(c.conquered.filter((id) => id !== START_TERRITORY.id).map((id) => [id, 1]));
     return c;
   } catch {
@@ -158,10 +162,10 @@ export function startingCastle(c: CampaignState): number {
 }
 
 /** Builds a fresh 3x3 battle for one territory with all campaign bonuses applied. */
-export function createLevelState(c: CampaignState, territoryId: string, seed = Date.now()): GameState {
+export function createLevelState(c: CampaignState, territoryId: string, seed = Date.now(), doctrine: DoctrineId = c.doctrine ?? 'front'): GameState {
   const t = getTerritory(territoryId);
   const s = newGame(c.race, seed);
-  s.level = { territoryId, name: t.name, terrain: t.terrain, totalWaves: territoryWaveCount(territoryId), trait: t.trait };
+  s.level = { territoryId, name: t.name, terrain: t.terrain, totalWaves: territoryWaveCount(territoryId), trait: t.trait, doctrine };
   s.perks = campaignPerks(c);
   s.unlocks = campaignUnlocks(c);
   s.gold = startingGold(c, territoryId);

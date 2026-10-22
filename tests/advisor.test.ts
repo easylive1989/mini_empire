@@ -21,7 +21,7 @@ describe('counter advisor', () => {
     expect(countersOf(getBuilding('dwarf_cannon'))).not.toContain('air');
     expect(countersOf(getBuilding('elf_tower'))).toEqual(expect.arrayContaining(['air', 'armor']));
     expect(countersOf(getBuilding('human_b_knight'))).toContain('boss');
-    expect(countersOf(getBuilding('human_b_militia'))).toEqual([]);
+    expect(countersOf(getBuilding('human_b_militia'))).toEqual(['shield']);
   });
 
   it('reads threats off enemy units', () => {

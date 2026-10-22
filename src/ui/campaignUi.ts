@@ -13,6 +13,7 @@ import {
   type CampaignState,
 } from '../game/campaign/campaign';
 import { getCampaignWave, territoryWaveCount } from '../game/campaign/campaignWaves';
+import { DOCTRINE_IDS, doctrineDesc, doctrineInfo, type DoctrineId } from '../game/campaign/doctrines';
 import { PERK_MAP } from '../game/campaign/perks';
 import { DEMON_LORD, LORE } from '../game/campaign/story';
 import { TERRAINS } from '../game/campaign/terrain';
@@ -596,6 +597,7 @@ export class CampaignUi {
       const best = territoryStars(c, t.id);
       nodes.push(h('div', { class: 'sec-title' }, h('span', {}, '戰功評價'), rating(best)), starRules(best));
     }
+    if (t.faction && (status === 'attackable' || (isReplayable(c, t.id) && territoryStars(c, t.id) < 3))) nodes.push(...this.doctrinePicker(c, t));
     if (status === 'liberated') {
       nodes.push(h('div', { class: 'status-pill good' }, icon('check', 16, { strokeWidth: 2.6 }), t.start ? '王子的據點' : '已收復'));
       if (isReplayable(c, t.id) && territoryStars(c, t.id) < 3) {
@@ -621,6 +623,31 @@ export class CampaignUi {
       nodes.push(h('div', { class: 'status-pill' }, icon('lock', 16), '必須先收復相鄰的領地'));
     }
     return nodes;
+  }
+
+  /** The two war doctrines for the next battle; the one the enemy's trait calls for is marked. */
+  private doctrinePicker(c: CampaignState, t: Territory): Node[] {
+    const chosen = c.doctrine ?? 'front';
+    const suggested: DoctrineId | null = t.trait ? (t.trait === 'shieldwall' ? 'front' : 'ranged') : null;
+    const pick = (id: DoctrineId) => () => {
+      c.doctrine = id;
+      this.actions.selectTerritory(t.id);
+    };
+    return [
+      h('div', { class: 'sec-title' }, h('span', {}, '出征流派')),
+      h(
+        'div',
+        { class: 'doctrine-opts' },
+        DOCTRINE_IDS.map((id) =>
+          h(
+            'button',
+            { class: `doctrine-opt ${id === chosen ? 'active' : ''}`, 'aria-pressed': String(id === chosen), onclick: pick(id) },
+            h('b', {}, doctrineInfo(c.race, id).name, id === suggested ? h('em', {}, '建議') : null),
+            h('span', {}, doctrineDesc(c.race, id)),
+          ),
+        ),
+      ),
+    ];
   }
 
   private rewardCard(t: Territory): HTMLElement {

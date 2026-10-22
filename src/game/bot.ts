@@ -1,5 +1,7 @@
 import { countersOf, analyzeWave } from './advisor';
 import { waveForState } from './battle';
+import { doctrineOf, type DoctrineId } from './campaign/doctrines';
+import { getTerritory } from './campaign/territories';
 import { getBuilding, raceBuildings } from './data/index';
 import {
   build,
@@ -206,9 +208,10 @@ export function adaptivePrepare(state: GameState, planIndex: { n: number }): voi
     const spot = bestTile(state, answer.id);
     if (spot && canBuild(state, spot.i, spot.j, answer.id).ok) build(state, spot.i, spot.j, answer.id);
   }
-  // Armor covers the whole army: every other building of the plan deals magic damage.
+  // Armor and shield walls cover the whole army: every other building of the plan answers them.
   const plan = BOT_PLANS[state.race];
-  const counters = wave.trait === 'armored' ? plan.filter((id) => countersOf(getBuilding(id)).includes('armor')) : [];
+  const need = wave.trait === 'armored' ? 'armor' : wave.trait === 'shieldwall' ? 'shield' : null;
+  const counters = need ? plan.filter((id) => countersOf(getBuilding(id)).includes(need)) : [];
   botPrepare(state, planIndex, counters.length ? plan.flatMap((id, k) => [counters[k % counters.length], id]) : plan);
 }
 
@@ -217,4 +220,21 @@ export function monoPrepare(state: GameState, planIndex: { n: number }): void {
   const core = BOT_PLANS[state.race].find((id) => getBuilding(id).kind !== 'resource')!;
   // A long plan keeps the bot from ever reaching the campaign specials.
   botPrepare(state, planIndex, [core, 'gold_mine', core, 'gold_mine', ...Array<string>(30).fill(core)]);
+}
+
+/** The doctrine most of a build order belongs to (what a player sticking to one army would pick). */
+export function planDoctrine(plan: string[]): DoctrineId {
+  const ranged = plan.filter((id) => doctrineOf(getBuilding(id)) === 'ranged').length;
+  const front = plan.filter((id) => doctrineOf(getBuilding(id)) === 'front').length;
+  return ranged > front ? 'ranged' : 'front';
+}
+
+/** Doctrine for each strategy: the one-trick and fixed bots keep theirs, the wave reader adapts. */
+export function botDoctrine(race: RaceId, territoryId: string, strategy: 'fixed' | 'adaptive' | 'mono'): DoctrineId {
+  const plan = BOT_PLANS[race];
+  if (strategy === 'mono') return doctrineOf(getBuilding(plan.find((id) => getBuilding(id).kind !== 'resource')!)) ?? 'front';
+  // A shield wall is broken in melee; thorns, flyers, raiders and armor are answered from range.
+  const trait = getTerritory(territoryId).trait;
+  if (strategy === 'adaptive' && trait) return trait === 'shieldwall' ? 'front' : 'ranged';
+  return planDoctrine(plan);
 }

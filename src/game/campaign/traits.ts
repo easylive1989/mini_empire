@@ -5,7 +5,7 @@ import type { Modifiers } from '../types';
  * army that wins elsewhere has to change here. Every trait has an answer every race can build by
  * castle Lv.2 or Lv.3, and the counter advisor knows each one.
  */
-export type TraitId = 'armored' | 'thorns' | 'airborne' | 'raiders';
+export type TraitId = 'armored' | 'thorns' | 'airborne' | 'raiders' | 'shieldwall';
 
 export interface TraitDef {
   id: TraitId;
@@ -33,6 +33,13 @@ export const TRAITS: Record<TraitId, TraitDef> = {
     desc: '敵人的護甲長滿尖刺：近戰攻擊者受到與造成傷害等量的反彈。',
     answer: '遠程士兵與防禦塔不受反彈',
     apply: (m) => (m.enemyThorns += 1),
+  },
+  shieldwall: {
+    id: 'shieldwall',
+    name: '盾牆',
+    desc: '敵人舉盾推進：來自防禦塔、主堡與遠程士兵的傷害 -50%。',
+    answer: '近戰士兵衝進盾牆',
+    apply: (m) => (m.enemyRangedResist += 0.5),
   },
   airborne: {
     id: 'airborne',

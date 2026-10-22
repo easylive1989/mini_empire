@@ -269,6 +269,8 @@ export interface Modifiers {
   enemyArmorAdd: number;
   /** Share of physical damage a melee attacker takes back when it hits an enemy. */
   enemyThorns: number;
+  /** Share of damage enemies shrug off from towers, the castle and ranged soldiers. */
+  enemyRangedResist: number;
 }
 
 export interface BoonDef {

@@ -6,7 +6,7 @@ import type { BuildingDef, UnitDef, WaveDef } from './types';
  * Counter advisor: reads the next wave and the town you have built, and says which threats you have
  * no answer for and which buildings answer them. Pure functions of the game state, no rendering.
  */
-export type ThreatId = 'air' | 'armor' | 'thorns' | 'horde' | 'raider' | 'backline' | 'boss';
+export type ThreatId = 'air' | 'armor' | 'thorns' | 'shield' | 'horde' | 'raider' | 'backline' | 'boss';
 
 export interface ThreatDef {
   id: ThreatId;
@@ -22,6 +22,7 @@ export const THREATS: Record<ThreatId, ThreatDef> = {
   air: { id: 'air', name: '飛行單位', tag: '對空', answer: '可對空的塔或遠程兵' },
   armor: { id: 'armor', name: '重甲敵人', tag: '破甲', answer: '魔法傷害（無視護甲）' },
   thorns: { id: 'thorns', name: '荊棘護甲', tag: '遠程', answer: '遠程士兵或防禦塔（近戰會受到反彈傷害）' },
+  shield: { id: 'shield', name: '盾牆', tag: '近戰', answer: '近戰士兵（塔與遠程傷害減半）' },
   horde: { id: 'horde', name: '大批雜兵', tag: '範圍', answer: '範圍、連鎖或多重攻擊' },
   raider: { id: 'raider', name: '直衝建築', tag: '守城', answer: '防禦塔或嘲諷的坦克' },
   backline: { id: 'backline', name: '後排支援', tag: '狙擊', answer: '長射程或衝鋒型的士兵' },
@@ -58,6 +59,7 @@ export function countersOf(def: BuildingDef): ThreatId[] {
   if (t?.splash || has(def, 'chain') || has(def, 'pierce') || u?.splash || has(u, 'cleave') || has(u, 'multishot') || has(u, 'rootAoe')) out.push('horde');
   if (t || has(u, 'taunt')) out.push('raider');
   if (t || (u && u.range > 2.5)) out.push('thorns');
+  if (u && u.range <= 2.5) out.push('shield');
   if (u && (u.range >= 8 || u.ai === 'aggressive')) out.push('backline');
   const bossy = u && (has(u, 'bonusVsLarge') || has(u, 'charge') || has(u, 'critVsDisabled') || u.traits?.some((tr) => tr.type === 'onHit' && (tr.status === 'mark' || tr.status === 'rune')));
   if (bossy || (u && def.castleLevel >= 5)) out.push('boss');
@@ -95,6 +97,7 @@ export function analyzeWave(state: GameState, wave: WaveDef): Threat[] {
     // Battle traits: armor and thorns cover the whole army.
     if (wave.trait === 'armored' && !ids.includes('armor')) ids.push('armor');
     if (wave.trait === 'thorns') ids.push('thorns');
+    if (wave.trait === 'shieldwall') ids.push('shield');
     for (const id of ids) add(id, g.count, u.name);
     if (isFodder(u)) {
       fodder += g.count;
@@ -109,7 +112,7 @@ export function analyzeWave(state: GameState, wave: WaveDef): Threat[] {
   for (const t of state.tiles) if (t.building) built.push(getBuilding(t.building.defId));
   const options = availableBuildings(state).filter((b) => !(b.campaignOnly && built.some((x) => x.id === b.id)));
   const out: Threat[] = [];
-  for (const id of ['air', 'armor', 'thorns', 'raider', 'horde', 'backline', 'boss'] as ThreatId[]) {
+  for (const id of ['air', 'armor', 'thorns', 'shield', 'raider', 'horde', 'backline', 'boss'] as ThreatId[]) {
     const c = counts.get(id);
     if (!c) continue;
     const answers = (b: BuildingDef) => countersOf(b).includes(id);
@@ -121,7 +124,7 @@ export function analyzeWave(state: GameState, wave: WaveDef): Threat[] {
       .sort((a, b) => a.castleLevel - b.castleLevel)
       .map((b): [number, string] => [b.castleLevel, b.name]);
     // Missing anti-air or magic leaves enemies you cannot touch; the rest just make the wave harder.
-    const critical = id === 'air' || id === 'thorns' || (id === 'armor' && c.count >= 3) || (id === 'raider' && c.count >= 3);
+    const critical = id === 'air' || id === 'thorns' || id === 'shield' || (id === 'armor' && c.count >= 3) || (id === 'raider' && c.count >= 3);
     const severity = have.length ? 'ok' : critical ? 'warn' : 'info';
     out.push({ ...THREATS[id], count: c.count, units: [...c.units], have, suggest: now.map((b) => b.name), later, severity });
   }
@@ -157,6 +160,8 @@ export function defeatTip(state: GameState, wave: WaveDef, opts: { bossSurvived?
   if (armor) return `${list(armor.units)}身穿重甲，物理攻擊打不痛它們。${adviceFor(armor)}，魔法傷害會無視護甲。`;
   const thorns = find('thorns');
   if (thorns) return `敵人的荊棘護甲把近戰傷害反彈回去。${adviceFor(thorns)}，遠程攻擊不會被反彈。`;
+  const shield = find('shield');
+  if (shield) return `敵人的盾牆擋下一半的塔與遠程傷害。${adviceFor(shield)}，近戰攻擊不受盾牆影響。`;
   const raider = find('raider');
   if (raider) return `${list(raider.units)}會無視士兵、直衝建築。${adviceFor(raider)}守住最前線。`;
   const boss = threats.find((t) => t.id === 'boss');
