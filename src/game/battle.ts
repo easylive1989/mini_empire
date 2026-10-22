@@ -187,13 +187,11 @@ const RETARGET = 0.3;
 const BUILDING_RADIUS = 1.7;
 
 /**
- * How far the formation may push (x offsets from the front edge of the plot), how far a soldier looks
- * for targets, and the furthest x (from the front edge) it will chase an enemy to.
+ * How far soldiers march out and how far back they give ground (x offsets from the front edge of the
+ * plot), how far a soldier looks for targets, and the furthest x (from the front edge) it will chase to.
  */
 export const FORMATION = { minPush: 3, maxPush: 13, acquire: 12, leash: 19 };
-/** Soldiers that must gather at the line before the formation moves forward. */
-const MIN_GROUP = 4;
-const PUSH_SPEED = 1.8;
+const ADVANCE_SPEED = 1.8;
 const RETREAT_SPEED = 3;
 const AGGRESSIVE_BONUS = 5;
 
@@ -214,8 +212,12 @@ export class Battle {
   readonly rng: Rng;
   readonly wave: number;
   readonly waveDef: WaveDef;
-  /** Current x of the formation's front line; moves with the balance of forces. */
-  pushLine: number;
+  /**
+   * Where soldiers without a target march to. Every soldier heads straight there from its barracks,
+   * so the army's shape comes from unit speeds alone. The line starts at midfield and only gives
+   * ground while the enemy ahead clearly outmatches the army.
+   */
+  advanceLine: number;
   entities: Entity[] = [];
   buildings: BBuilding[] = [];
   projectiles: Projectile[] = [];
@@ -254,7 +256,7 @@ export class Battle {
     let maxI = 1;
     for (const t of state.tiles) if (t.owned) maxI = Math.max(maxI, t.i);
     this.frontX = maxI * TILE + TILE / 2;
-    this.pushLine = this.frontX + FORMATION.minPush;
+    this.advanceLine = this.maxAdvance();
     this.setupBuildings();
     this.setupSchedule();
   }
@@ -467,6 +469,25 @@ export class Battle {
     const canHitAir = !!e.def.canHitAir;
     for (const o of this.entities) {
       if (!this.canTarget({ team: e.team, canHitAir }, o) || o.x > maxX) continue;
+      const d = dist2(e.x, e.z, o.x, o.z);
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * The nearest enemy that slipped past the advance line and is going for a building. Soldiers march
+   * out on their own, so without this flyers and thieves would raze the town behind an idle army.
+   */
+  private intruder(e: Entity): Entity | undefined {
+    let best: Entity | undefined;
+    let bestD = Infinity;
+    const canHitAir = !!e.def.canHitAir;
+    for (const o of this.entities) {
+      if (o.targetBuilding === null || o.x >= this.advanceLine || !this.canTarget({ team: e.team, canHitAir }, o)) continue;
       const d = dist2(e.x, e.z, o.x, o.z);
       if (d < bestD) {
         bestD = d;
@@ -785,7 +806,7 @@ export class Battle {
     }
 
     this.updateBarracks(dt);
-    this.updateFormation(dt);
+    this.updateAdvanceLine(dt);
     this.updateStatuses(dt);
     this.updateDerived();
     for (const e of this.entities) if (e.alive) this.updateTraits(e, dt);
@@ -1247,46 +1268,31 @@ export class Battle {
       }
       return;
     }
-    // No target: player units form up on the push line, enemies march on.
+    // No target: player units march out to the advance line, enemies march on.
     if (actsAsPlayer) {
       if (e.def.ai === 'engineer') this.engineerIdle(e, dt);
-      else this.moveToward(e, this.rallyX(e), e.rallyZ, 0.4, dt);
+      else this.moveToward(e, this.advanceLine, e.rallyZ, 0.4, dt);
       if (!e.moving) e.moved = 0;
     } else {
       this.moveToward(e, 0, 0, 2, dt);
     }
   }
 
-  /** Where a soldier without a target stands: melee on the line, ranged and support behind it. */
-  rallyX(e: Entity): number {
-    if (e.def.ai === 'support') return Math.max(this.frontX - 0.5, this.pushLine - 5);
-    if (e.def.range > 2.5) return Math.max(this.frontX + 0.5, this.pushLine - 3.5);
-    return this.pushLine + (e.def.ai === 'aggressive' ? 2 : 0);
+  private maxAdvance(): number {
+    return Math.min(this.frontX + FORMATION.maxPush, SPAWN_X - 2);
   }
 
-  /**
-   * Moves the formation line: once enough soldiers have gathered and they are not outmatched by
-   * the enemies ahead, the line marches forward; if the enemy clearly has the upper hand it falls back.
-   */
-  private updateFormation(dt: number): void {
-    const min = this.frontX + FORMATION.minPush;
-    const max = Math.min(this.frontX + FORMATION.maxPush, SPAWN_X - 2);
+  /** Falls back while the enemies ahead clearly outmatch the army, and marches out again once they don't. */
+  private updateAdvanceLine(dt: number): void {
     let ours = 0;
-    let gathered = 0;
     let theirs = 0;
     for (const e of this.entities) {
-      if (!e.alive || e.def.ai === 'engineer') continue;
-      const power = unitPower(e);
-      if (e.team === 'player') {
-        if (e.def.ai === 'support') continue;
-        ours += power;
-        if (e.x >= this.pushLine - 4) gathered++;
-      } else if (e.x < this.pushLine + 14) {
-        theirs += power;
-      }
+      if (!e.alive || e.def.ai === 'engineer' || e.def.ai === 'support') continue;
+      if (e.team === 'player') ours += unitPower(e);
+      else if (e.x < this.advanceLine + 14) theirs += unitPower(e);
     }
-    if (gathered >= MIN_GROUP && ours >= theirs * 0.8) this.pushLine = Math.min(max, this.pushLine + PUSH_SPEED * dt);
-    else if (ours < theirs * 0.6) this.pushLine = Math.max(min, this.pushLine - RETREAT_SPEED * dt);
+    if (ours < theirs * 0.6) this.advanceLine = Math.max(this.frontX + FORMATION.minPush, this.advanceLine - RETREAT_SPEED * dt);
+    else if (ours >= theirs * 0.8) this.advanceLine = Math.min(this.maxAdvance(), this.advanceLine + ADVANCE_SPEED * dt);
   }
 
   private engineerMayChase(e: Entity, t: Entity): boolean {
@@ -1326,7 +1332,7 @@ export class Battle {
       const cur = this.getEntity(e.targetId);
       // Past the leash, still answer whoever is attacking this soldier: otherwise a lone archer
       // standing just outside it could stall the wave until it times out.
-      const foe = this.nearestFoe(e, acquire, maxX) ?? this.attackerOf(e, acquire);
+      const foe = this.nearestFoe(e, acquire, maxX) ?? this.attackerOf(e, acquire) ?? this.intruder(e);
       // Stick to the current target unless something is much closer.
       if (cur?.alive && cur.team !== e.team && foe && cur !== foe) {
         const dc = dist2(e.x, e.z, cur.x, cur.z);

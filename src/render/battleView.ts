@@ -97,7 +97,7 @@ export class BattleView {
     this.ownedExtent = ext;
     this.town.beginBattle();
     this.flag = rallyFlag(RACE_MAP.get(battle.state.race)!.color);
-    this.flag.position.set(battle.pushLine, 0, -1);
+    this.flag.position.set(battle.advanceLine, 0, -1);
     this.world.units.add(this.flag);
   }
 
@@ -314,7 +314,7 @@ export class BattleView {
     this.town.updateBattle(b);
     this.floaters.update();
     if (this.flag) {
-      const fx = this.flag.position.x + (b.pushLine - this.flag.position.x) * Math.min(1, dt * 4);
+      const fx = this.flag.position.x + (b.advanceLine - this.flag.position.x) * Math.min(1, dt * 4);
       this.flag.position.set(fx, this.groundY(fx, -1), -1);
       const cloth = this.flag.getObjectByName('cloth') as THREE.Mesh;
       const pos = cloth.geometry.getAttribute('position') as THREE.BufferAttribute;

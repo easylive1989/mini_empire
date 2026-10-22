@@ -286,19 +286,16 @@ describe('battle timeout', () => {
   });
 });
 
-describe('army formation', () => {
+describe('army march', () => {
   // 3x3 plot: the front edge of the plot is at x = 6.
   const FRONT = 6;
 
-  it('a gathered army pushes the line forward up to the midfield limit', () => {
-    const b = arena('human');
-    const start = b.pushLine;
-    expect(start).toBeCloseTo(FRONT + FORMATION.minPush);
-    for (let k = 0; k < 5; k++) spawn(b, 'human_militia', 'player', start, k - 2);
-    run(b, 3);
-    expect(b.pushLine).toBeGreaterThan(start + 3);
-    run(b, 20);
-    expect(b.pushLine).toBeCloseTo(FRONT + FORMATION.maxPush);
+  it('a lone soldier marches out to the advance line without waiting for others', () => {
+    const b = arena('elf');
+    expect(b.advanceLine).toBeCloseTo(FRONT + FORMATION.maxPush);
+    const archer = spawn(b, 'elf_archer', 'player', FRONT - 2);
+    run(b, 8);
+    expect(archer.x).toBeCloseTo(b.advanceLine, 0);
   });
 
   it('soldiers answer an attacker standing past the chase limit', () => {
@@ -313,23 +310,24 @@ describe('army formation', () => {
 
   it('falls back when the enemy ahead is much stronger', () => {
     const b = arena('human');
-    b.pushLine = FRONT + 12;
     spawn(b, 'human_militia', 'player', FRONT + 12);
     for (let k = 0; k < 4; k++) {
       const brute = spawn(b, 'm_brute', 'enemy', FRONT + 22, k);
       brute.def = { ...brute.def, speed: 0 };
     }
     run(b, 2);
-    expect(b.pushLine).toBeLessThan(FRONT + 8);
+    expect(b.advanceLine).toBeLessThan(FRONT + 8);
   });
 
-  it('lets charging units lead the formation and keeps ranged units behind', () => {
+  it('lets faster soldiers lead the march', () => {
     const b = arena('human');
     const knight = spawn(b, 'human_knight', 'player', FRONT);
-    const militia = spawn(b, 'human_militia', 'player', FRONT);
-    expect(b.rallyX(knight)).toBeGreaterThan(b.rallyX(militia));
-    const archer = spawn(b, 'human_archer', 'player', FRONT);
-    expect(b.rallyX(archer)).toBeLessThan(b.rallyX(militia));
+    const priest = spawn(b, 'human_priest', 'player', FRONT, 2);
+    knight.rallyZ = knight.z;
+    priest.rallyZ = priest.z;
+    run(b, 2);
+    expect(knight.def.speed).toBeGreaterThan(priest.def.speed);
+    expect(knight.x).toBeGreaterThan(priest.x + 2);
   });
 });
 
