@@ -5,7 +5,8 @@ import type { TerrainId } from './terrain';
  * The world map: a radius-2 hex grid in axial coordinates (q, r).
  * The prince starts in the south-west corner; the fallen capital lies in the opposite corner.
  * The straight road (q + r = 0) goes through rebel land and one undead stronghold; the two flanks
- * belong to the goblins (q + r < 0) and the orcs (q + r > 0).
+ * belong to the goblins (q + r < 0) and the orcs (q + r > 0). Wild land lies between territories;
+ * where it is a mountain range, a lake or a dense forest (`BARRIERS`), the two sides do not connect.
  */
 export interface Territory {
   id: string;
@@ -73,6 +74,43 @@ export function territoryTier(t: Territory): number {
   return t.capital ? 5 : hexDistance(t, START_TERRITORY);
 }
 
+export type BarrierKind = 'mountains' | 'lake' | 'forest';
+
+/** Wild land between two bordering territories that no army can cross. */
+export interface Barrier {
+  a: string;
+  b: string;
+  kind: BarrierKind;
+  name: string;
+}
+
+export const BARRIER_KIND_NAME: Record<BarrierKind, string> = { mountains: '山脈', lake: '湖泊', forest: '密林' };
+
+/**
+ * The borders that are closed. None of them is on the straight road to the capital, so it can still
+ * be taken in four battles; they make the flanks longer to sweep.
+ */
+export const BARRIERS: Barrier[] = [
+  { a: 't_whisper', b: 't_goblincave', kind: 'forest', name: '幽暗密林' },
+  { a: 't_mushroom', b: 't_fanghills', kind: 'lake', name: '迷霧湖' },
+  { a: 't_ember', b: 't_frostfang', kind: 'mountains', name: '赤脊山' },
+  { a: 't_frostfang', b: 't_oldvein', kind: 'mountains', name: '霜脊山脈' },
+  { a: 't_wailing', b: 't_spring', kind: 'lake', name: '亡者之湖' },
+];
+
+export function barrierBetween(a: string, b: string): Barrier | undefined {
+  return BARRIERS.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+}
+
+/** Territories one step away that an army can march to (bordering, and no barrier between). */
 export function neighbours(t: Territory): Territory[] {
-  return TERRITORIES.filter((o) => hexDistance(o, t) === 1);
+  return TERRITORIES.filter((o) => hexDistance(o, t) === 1 && !barrierBetween(o.id, t.id));
+}
+
+/** Bordering territories cut off by a barrier, with what lies between. */
+export function blockedNeighbours(t: Territory): { t: Territory; barrier: Barrier }[] {
+  return TERRITORIES.flatMap((o) => {
+    const barrier = hexDistance(o, t) === 1 ? barrierBetween(o.id, t.id) : undefined;
+    return barrier ? [{ t: o, barrier }] : [];
+  });
 }

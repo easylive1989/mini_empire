@@ -8,7 +8,8 @@ import type { RaceId } from '../game/types';
 import { packItem, type Assets, type PackName } from './assets';
 import { PRESETS, type Quality } from './quality';
 import { buildingMaterial } from './recolor';
-import { addLights, clamp01, ease, hexToWorld, puffTexture, skyTexture, SoftParticles } from './sceneKit';
+import { borderLinks, buildLand, fineOf, type Land, type LinkTile } from './mapTerrain';
+import { addLights, clamp01, ease, hexToWorld, puffTexture, SoftParticles } from './sceneKit';
 import type { ViewInsets } from './world';
 
 export type TerritoryStatus = 'liberated' | 'attackable' | 'occupied';
@@ -16,6 +17,10 @@ export type TerritoryStatus = 'liberated' | 'attackable' | 'occupied';
 /** Hex circumradius of one territory on the map. */
 const SIZE = 2.4;
 const HEX_R = SIZE * 1.1547;
+/** Fine-grid radius of the land around the realm (the haze hides where it ends). */
+const LAND_RADIUS = 10;
+/** Width of a road between two territories. */
+const ROAD_W = 0.42;
 
 const TINT: Record<TerrainId, string> = {
   plains: '#b5e3a0',
@@ -101,7 +106,13 @@ export class MapView {
   private readonly particles = new SoftParticles();
   private readonly lights: { hemi: THREE.HemisphereLight; sun: THREE.DirectionalLight };
   private readonly capitalGlow = new THREE.PointLight('#ff3b3b', 30, 14, 1.6);
-  private readonly water: THREE.MeshStandardMaterial[] = [];
+  private land: Land | null = null;
+  private landLite: boolean | null = null;
+  private roads: { link: LinkTile; mat: THREE.MeshStandardMaterial }[] = [];
+  private readonly barriers = borderLinks(SIZE).filter((l) => l.barrier);
+  private readonly fog = new THREE.Fog('#1d1622', 60, 140);
+  /** Centre of the realm, and its half-extent on the ground (x, z). */
+  private readonly realm = { center: new THREE.Vector3(), half: new THREE.Vector2(1, 1) };
   private race: RaceId | null = null;
   private hover: string | null = null;
   private selected: string | null = null;
@@ -118,14 +129,77 @@ export class MapView {
   private fly = 1;
   private flyDuration = 1;
   private readonly basePose = { target: new THREE.Vector3(0.4, 0, 0.8), dist: 40, pitch: 56, yaw: 0 };
+  /** The player's own view on the map: a pan on the ground and a zoom factor (wheel and drag). */
+  private readonly pan = new THREE.Vector2();
+  private zoom = 1;
+  private shownZoom = 1;
+  private readonly shownPan = new THREE.Vector2();
 
   constructor(private readonly assets: Assets) {
     this.scene.add(this.root, this.particles.points);
-    this.lights = addLights(this.scene, 26);
-    this.lights.sun.position.set(-14, 34, 20);
+    this.scene.fog = this.fog;
+    this.lights = addLights(this.scene, 52);
+    this.lights.sun.position.set(-24, 50, 30);
+    this.lights.sun.shadow.camera.far = 160;
     this.capitalGlow.position.set(0, 3, 0);
     this.scene.add(this.capitalGlow);
-    this.buildSea();
+    // The realm's extent on the ground, for the camera.
+    const pts = TERRITORIES.map((t) => this.territoryPos(t));
+    const box = new THREE.Box3().setFromPoints(pts);
+    box.getCenter(this.realm.center);
+    this.realm.half.set((box.max.x - box.min.x) / 2 + HEX_R, (box.max.z - box.min.z) / 2 + HEX_R);
+    this.basePose.target.copy(this.realm.center);
+    this.buildRoads();
+  }
+
+  /** World position of a territory: two fine tiles from each of its neighbours. */
+  private territoryPos(t: Territory): THREE.Vector3 {
+    const f = fineOf(t);
+    return hexToWorld(f.q, f.r, SIZE);
+  }
+
+  /** (Re)builds the land; the light preset gets fewer props far out. */
+  private ensureLand(lite: boolean): void {
+    if (this.landLite === lite) return;
+    if (this.land) {
+      this.root.remove(this.land.group);
+      for (const m of this.land.group.children as THREE.Mesh[]) {
+        m.geometry.dispose();
+        (m.material as THREE.Material).dispose();
+      }
+    }
+    this.land = buildLand(this.assets, SIZE, LAND_RADIUS, lite);
+    this.landLite = lite;
+    this.root.add(this.land.group);
+    this.moodKey = -1;
+  }
+
+  /** A packed-earth road across the tile between two territories that border without a barrier. */
+  private buildRoads(): void {
+    const tex = roadTexture();
+    for (const link of borderLinks(SIZE)) {
+      if (link.barrier) continue;
+      const a = this.territoryPos(link.a);
+      const b = this.territoryPos(link.b);
+      const dir = b.clone().sub(a).normalize();
+      // From hex edge to hex edge (the territories' own tiles stay clean).
+      const from = a.clone().addScaledVector(dir, SIZE * 0.92);
+      const to = b.clone().addScaledVector(dir, -SIZE * 0.92);
+      const len = from.distanceTo(to);
+      const t = tex.clone();
+      t.needsUpdate = true;
+      t.repeat.set(1, len / 1.2);
+      const mat = new THREE.MeshStandardMaterial({ map: t, color: '#8a7a5a', roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W, len), mat);
+      road.rotation.x = -Math.PI / 2;
+      road.rotation.z = -Math.atan2(dir.x, dir.z);
+      // (the land is flattened to just below this along the road)
+      road.position.copy(from.clone().add(to).multiplyScalar(0.5)).setY(-0.115);
+      road.receiveShadow = true;
+      road.renderOrder = 1;
+      this.root.add(road);
+      this.roads.push({ link, mat });
+    }
   }
 
   // ---------------------------------------------------------------- construction
@@ -134,34 +208,6 @@ export class MapView {
     const o = packItem(this.assets, pack, key).clone();
     o.position.set(0, 0, 0);
     return o;
-  }
-
-  private buildSea(): void {
-    const src = this.clone('env', 'hex_water');
-    const mats = new Map<THREE.Material, THREE.MeshStandardMaterial>();
-    for (let q = -6; q <= 6; q++) {
-      for (let r = -6; r <= 6; r++) {
-        const d = Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r));
-        if (d < 3 || d > 6) continue;
-        const o = src.clone();
-        o.traverse((m) => {
-          const mesh = m as THREE.Mesh;
-          if (!mesh.isMesh) return;
-          let mat = mats.get(mesh.material as THREE.Material);
-          if (!mat) {
-            mat = (mesh.material as THREE.MeshStandardMaterial).clone();
-            mats.set(mesh.material as THREE.Material, mat);
-            this.water.push(mat);
-          }
-          mesh.material = mat;
-          mesh.castShadow = false;
-        });
-        o.scale.set(SIZE, 1, SIZE);
-        o.position.copy(hexToWorld(q, r, SIZE));
-        o.position.y = -0.25;
-        this.root.add(o);
-      }
-    }
   }
 
   private place(item: Item, race: RaceId | 'shadow', parent: THREE.Object3D): THREE.Object3D {
@@ -212,7 +258,7 @@ export class MapView {
     const ringGeo = new THREE.RingGeometry(HEX_R * 0.86, HEX_R * 0.97, 6, 1, Math.PI / 2);
     for (const t of TERRITORIES) {
       const group = new THREE.Group();
-      group.position.copy(hexToWorld(t.q, t.r, SIZE));
+      group.position.copy(this.territoryPos(t));
       const elev = ELEVATION[t.terrain] ?? 0;
       const tileObj = (t.terrain === 'river' ? river : grass).clone();
       tileObj.scale.set(SIZE * 0.985, 1 + elev, SIZE * 0.985);
@@ -317,6 +363,22 @@ export class MapView {
       this.applyLook(n);
     }
     this.progress = liberated / this.nodes.size;
+    // Roads between liberated lands are open and bright; the rest are faded tracks.
+    for (const { link, mat } of this.roads) {
+      const free = (id: string) => this.nodes.get(id)?.status === 'liberated';
+      const both = free(link.a.id) && free(link.b.id);
+      const front = free(link.a.id) !== free(link.b.id);
+      mat.color.set(both ? '#fff2d4' : front ? '#e8cf96' : '#8a7a5a');
+      mat.opacity = both ? 1 : front ? 0.95 : 0.55;
+    }
+  }
+
+  /** Screen positions (CSS px) of the barriers' name labels. */
+  barrierLabelPositions(): { name: string; kind: string; x: number; y: number }[] {
+    return this.barriers.map((l) => {
+        const v = l.pos.clone().setY(0.4).project(this.camera);
+      return { name: l.barrier!.name, kind: l.barrier!.kind, x: ((v.x + 1) / 2) * this.width, y: ((1 - v.y) / 2) * this.height };
+    });
   }
 
   /** Plays the liberation animation of one territory (call after setCampaign). */
@@ -356,10 +418,12 @@ export class MapView {
     const availW = Math.max(200, w - insets.left - insets.right);
     const availH = Math.max(200, h - insets.top - insets.bottom);
     const tan = Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2);
-    // The map spans about 24 x 20 world units once tilted.
-    const dH = (17 * h) / (availH * 2 * tan);
-    const dW = (25 * h) / (availW * 2 * tan);
-    this.basePose.dist = Math.max(dH, dW) * 0.9;
+    // Frame the realm (its depth foreshortened by the pitch); the wild land around it fills the rest.
+    const spanW = this.realm.half.x * 2;
+    const spanH = this.realm.half.y * 2 * Math.sin(THREE.MathUtils.degToRad(this.basePose.pitch)) + 3;
+    const dH = (spanH * h) / (availH * 2 * tan);
+    const dW = (spanW * h) / (availW * 2 * tan);
+    this.basePose.dist = Math.max(dH, dW) * 0.98;
     const dx = insets.left + availW / 2 - w / 2;
     const dy = insets.top + availH / 2 - h / 2;
     this.camera.setViewOffset(w, h, -dx, -dy, w, h);
@@ -371,13 +435,48 @@ export class MapView {
   flyIn(duration: number): void {
     this.fly = 0;
     this.flyDuration = duration;
+    this.resetView();
   }
 
-  private updateCamera(): void {
+  /** Back to the whole realm in view. */
+  resetView(): void {
+    this.pan.set(0, 0);
+    this.zoom = 1;
+  }
+
+  /** Zooms in (negative steps) or out, between a close look and a little past the whole realm. */
+  zoomBy(steps: number): void {
+    this.zoom = THREE.MathUtils.clamp(this.zoom * Math.pow(1.12, steps), 0.55, 1.3);
+    this.clampPan();
+  }
+
+  /** Drags the map by a screen-space offset in CSS pixels (the ground follows the pointer). */
+  panBy(dx: number, dy: number): void {
+    const dist = this.basePose.dist * this.zoom;
+    const perPx = (2 * dist * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2)) / this.height;
+    const pitch = THREE.MathUtils.degToRad(this.basePose.pitch);
+    this.pan.x -= dx * perPx;
+    this.pan.y -= (dy * perPx) / Math.sin(pitch);
+    this.clampPan();
+  }
+
+  /** Keeps the view over the realm: the closer the zoom, the farther it may wander. */
+  private clampPan(): void {
+    const slack = 0.35 + (1.3 - this.zoom) * 0.6;
+    this.pan.x = THREE.MathUtils.clamp(this.pan.x, -this.realm.half.x * slack, this.realm.half.x * slack);
+    this.pan.y = THREE.MathUtils.clamp(this.pan.y, -this.realm.half.y * slack, this.realm.half.y * slack);
+  }
+
+  private updateCamera(dt: number): void {
     const p = this.basePose;
     let yaw = p.yaw + Math.sin(this.time * 0.15) * 0.04;
     let pitch = THREE.MathUtils.degToRad(p.pitch);
-    let dist = p.dist;
+    // The player's pan and zoom ease in; the title orbit and the fly-in ignore them.
+    const k = Math.min(1, dt * 10);
+    const user = this.mode === 'map' && this.fly >= 1;
+    this.shownZoom += ((user ? this.zoom : 1) - this.shownZoom) * k;
+    this.shownPan.lerp(user ? this.pan : new THREE.Vector2(), k);
+    let dist = p.dist * this.shownZoom;
     if (this.mode === 'orbit') {
       yaw = this.time * 0.05;
       pitch = THREE.MathUtils.degToRad(42);
@@ -390,8 +489,12 @@ export class MapView {
       yaw = THREE.MathUtils.lerp(-0.6, yaw, k);
     }
     const dir = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
-    this.camera.position.copy(p.target).addScaledVector(dir, dist);
-    this.camera.lookAt(p.target);
+    const target = p.target.clone().add(new THREE.Vector3(this.shownPan.x, 0, this.shownPan.y));
+    this.camera.position.copy(target).addScaledVector(dir, dist);
+    this.camera.lookAt(target);
+    // The land past the realm fades into the haze; the realm itself stays clear.
+    this.fog.near = dist * 0.92;
+    this.fog.far = dist * 1.75;
   }
 
   // ---------------------------------------------------------------- picking & labels
@@ -430,12 +533,13 @@ export class MapView {
 
   setQuality(q: Quality): void {
     this.puffShare = PRESETS[q].puffs;
+    this.ensureLand(q === 'low');
   }
 
   update(dt: number): void {
     this.time += dt;
     if (this.fly < 1) this.fly = Math.min(1, this.fly + dt / this.flyDuration);
-    this.updateCamera();
+    this.updateCamera(dt);
 
     // The world brightens as territories are liberated.
     this.shownProgress += (this.progress - this.shownProgress) * Math.min(1, dt * 1.5);
@@ -513,13 +617,43 @@ export class MapView {
     if (key === this.moodKey) return;
     this.moodKey = key;
     const lerp = (a: string, b: string) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), p).getHexString();
-    if (this.scene.background instanceof THREE.Texture) this.scene.background.dispose();
-    this.scene.background = skyTexture(lerp('#140b1c', '#4d86b8'), lerp('#55233a', '#cfe3ea'), lerp('#7a2c2c', '#f2d9a8'));
-    this.lights.hemi.color.set(lerp('#a89cc8', '#f4fbff'));
-    this.lights.hemi.groundColor.set(lerp('#2e2438', '#6d8a4e'));
-    this.lights.hemi.intensity = 1.0 + 0.6 * p;
-    this.lights.sun.color.set(lerp('#e8b8c8', '#fff1d6'));
-    this.lights.sun.intensity = 1.4 + 1.2 * p;
-    for (const m of this.water) m.color.set(lerp('#5a4a78', '#ffffff'));
+    // No sky or sea around the realm: the land runs on and fades into a haze, dusky while the demon
+    // lord holds the realm, warm parchment as it is won back.
+    const haze = lerp('#3a2f3c', '#d8cca6');
+    this.scene.background = new THREE.Color(haze);
+    this.fog.color.set(haze);
+    for (const m of this.land?.materials ?? []) m.color.set(lerp('#b3aabb', '#ffffff'));
+    this.lights.hemi.color.set(lerp('#c4b8dc', '#f4fbff'));
+    this.lights.hemi.groundColor.set(lerp('#4a4050', '#6d8a4e'));
+    this.lights.hemi.intensity = 1.25 + 0.4 * p;
+    this.lights.sun.color.set(lerp('#f0c6c0', '#fff1d6'));
+    this.lights.sun.intensity = 1.8 + 0.9 * p;
   }
+}
+
+/** Packed earth: a pale track with darker ruts and soft edges, tiled along the road. */
+function roadTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 32;
+  c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 32, 0);
+  grad.addColorStop(0, 'rgba(160,130,80,0)');
+  grad.addColorStop(0.18, 'rgba(176,146,96,0.9)');
+  grad.addColorStop(0.5, 'rgba(214,188,138,1)');
+  grad.addColorStop(0.82, 'rgba(176,146,96,0.9)');
+  grad.addColorStop(1, 'rgba(160,130,80,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 64);
+  g.fillStyle = 'rgba(120,96,60,0.45)';
+  for (const x of [10, 21]) g.fillRect(x, 0, 2, 64);
+  for (let k = 0; k < 14; k++) {
+    g.fillStyle = `rgba(${90 + ((k * 37) % 60)},${80 + ((k * 23) % 40)},60,0.6)`;
+    g.fillRect(6 + ((k * 13) % 20), (k * 29) % 64, 2, 2);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.ClampToEdgeWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }

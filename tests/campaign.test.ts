@@ -22,7 +22,10 @@ import { getCampaignWave, territoryWaveCount } from '../src/game/campaign/campai
 import { PERK_MAP } from '../src/game/campaign/perks';
 import { TERRAINS } from '../src/game/campaign/terrain';
 import {
+  BARRIERS,
+  blockedNeighbours,
   CAPITAL_TERRITORY,
+  getTerritory,
   hexDistance,
   neighbours,
   START_TERRITORY,
@@ -44,6 +47,18 @@ describe('world map', () => {
     expect(keys.size).toBe(19);
     for (const t of TERRITORIES) expect(hexDistance(t, { q: 0, r: 0 })).toBeLessThanOrEqual(2);
     expect(hexDistance(START_TERRITORY, CAPITAL_TERRITORY)).toBe(4);
+  });
+
+  it('closes a few borders with barriers but keeps every territory reachable', () => {
+    for (const b of BARRIERS) {
+      expect(hexDistance(getTerritory(b.a), getTerritory(b.b))).toBe(1);
+      expect(neighbours(getTerritory(b.a)).map((t) => t.id)).not.toContain(b.b);
+      expect(blockedNeighbours(getTerritory(b.b)).map((x) => x.t.id)).toContain(b.a);
+    }
+    const seen = new Set([START_TERRITORY.id]);
+    const queue = [START_TERRITORY];
+    while (queue.length) for (const n of neighbours(queue.shift()!)) if (!seen.has(n.id)) seen.add(n.id), queue.push(n);
+    expect(seen.size).toBe(TERRITORIES.length);
   });
 
   it('has four factions plus the demon lord, and six special-building rewards', () => {

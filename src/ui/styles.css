@@ -3755,3 +3755,60 @@ hr {
   gap: 4px;
   color: var(--gold-hi);
 }
+
+/* ---------------------------------------------------------------- world map barriers */
+.barrier-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #f3e4bf;
+  text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.barrier-label small {
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: #d8c9a4;
+}
+
+.barrier-label.lake {
+  color: #cfe8f0;
+}
+
+.map-legend .lg-wild {
+  background: repeating-linear-gradient(135deg, #6b7a5a 0 3px, #8a8f80 3px 6px);
+}
+
+.blocked-note {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(201, 163, 92, 0.35);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.blocked-note .ico {
+  margin-top: 2px;
+  color: var(--brass);
+}
+
+.map-legend .lg-hint {
+  color: var(--text-4);
+}

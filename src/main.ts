@@ -617,8 +617,43 @@ class App {
 
   /** Pointer input on the 3D view; re-attached when a quality change swaps the canvas. */
   private bindCanvas(canvas: HTMLCanvasElement): void {
+    // World map: the wheel zooms, a drag pans (and a drag doesn't count as a click).
+    let drag: { x: number; y: number; moved: boolean } | null = null;
+    let dragged = false;
+    canvas.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.mode !== 'map' || this.cui.menuOpen) return;
+        e.preventDefault();
+        this.map.zoomBy(Math.sign(e.deltaY));
+      },
+      { passive: false },
+    );
+    canvas.addEventListener('pointerdown', (e) => {
+      dragged = false;
+      if (this.mode === 'map' && !this.cui.menuOpen) drag = { x: e.clientX, y: e.clientY, moved: false };
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag || this.mode !== 'map' || !(e.buttons & 1)) return;
+      const dx = e.clientX - drag.x;
+      const dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      drag.moved = true;
+      document.body.style.cursor = 'grabbing';
+      this.map.panBy(dx, dy);
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+    });
+    window.addEventListener('pointerup', () => {
+      if (drag?.moved) {
+        dragged = true;
+        document.body.style.cursor = '';
+      }
+      drag = null;
+    });
     canvas.addEventListener('mousemove', (e) => {
       if (this.mode === 'map') {
+        if (drag?.moved) return;
         const id = this.cui.menuOpen ? null : this.map.pick(e.clientX, e.clientY);
         this.map.setHover(id);
         document.body.style.cursor = id ? 'pointer' : '';
@@ -633,7 +668,7 @@ class App {
     });
     canvas.addEventListener('click', (e) => {
       if (this.mode === 'map') {
-        if (this.cui.menuOpen) return;
+        if (this.cui.menuOpen || dragged) return;
         this.selectTerritory(this.map.pick(e.clientX, e.clientY));
         return;
       }
@@ -697,6 +732,7 @@ class App {
       case 'map':
         this.map.update(dt);
         this.cui.updateLabels(this.map.labelPositions());
+        this.cui.updateBarrierLabels(this.map.barrierLabelPositions());
         world.draw(this.map.scene, this.map.camera);
         break;
       case 'title':
