@@ -16,7 +16,7 @@ export const CAMPAIGN = {
   /** Classic-wave equivalent added per wave inside a territory, by tier. */
   tierStep: [0, 1.4, 1.6, 1.7, 1.8, 1.75],
   /** Army strength multiplier by tier (the war chest only covers part of the climb). */
-  tierBudget: [0, 1.3, 1.0, 1.0, 0.9, 0.75],
+  tierBudget: [0, 1.6, 1.05, 1.0, 0.9, 0.75],
   /** Boss HP relative to its classic stats, by tier. */
   bossHp: [0, 0.4, 0.55, 0.75, 0.9, 0.7],
 };
