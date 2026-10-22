@@ -732,7 +732,7 @@ class App {
       case 'map':
         this.map.update(dt);
         this.cui.updateLabels(this.map.labelPositions());
-        this.cui.updateBarrierLabels(this.map.barrierLabelPositions());
+        this.cui.updateRegionLabels(this.map.regionLabelPositions());
         world.draw(this.map.scene, this.map.camera);
         break;
       case 'title':

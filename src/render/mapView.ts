@@ -1,14 +1,14 @@
 import * as THREE from 'three';
 import { isAttackable, isConquered, type CampaignState } from '../game/campaign/campaign';
 import type { TerrainId } from '../game/campaign/terrain';
-import { TERRITORIES, type Territory } from '../game/campaign/territories';
+import { BOARD_RADIUS, REGIONS, TERRITORIES, type Territory } from '../game/campaign/territories';
 import { FACTIONS } from '../game/data/factions';
 import { RACE_MAP } from '../game/data/index';
 import type { RaceId } from '../game/types';
 import { packItem, type Assets, type PackName } from './assets';
 import { PRESETS, type Quality } from './quality';
 import { buildingMaterial } from './recolor';
-import { borderLinks, buildLand, fineOf, type Land, type LinkTile } from './mapTerrain';
+import { buildWild, type Land } from './mapTerrain';
 import { addLights, clamp01, ease, hexToWorld, puffTexture, SoftParticles } from './sceneKit';
 import type { ViewInsets } from './world';
 
@@ -17,10 +17,6 @@ export type TerritoryStatus = 'liberated' | 'attackable' | 'occupied';
 /** Hex circumradius of one territory on the map. */
 const SIZE = 2.4;
 const HEX_R = SIZE * 1.1547;
-/** Fine-grid radius of the land around the realm (the haze hides where it ends). */
-const LAND_RADIUS = 10;
-/** Width of a road between two territories. */
-const ROAD_W = 0.42;
 
 const TINT: Record<TerrainId, string> = {
   plains: '#b5e3a0',
@@ -108,8 +104,12 @@ export class MapView {
   private readonly capitalGlow = new THREE.PointLight('#ff3b3b', 30, 14, 1.6);
   private land: Land | null = null;
   private landLite: boolean | null = null;
-  private roads: { link: LinkTile; mat: THREE.MeshStandardMaterial }[] = [];
-  private readonly barriers = borderLinks(SIZE).filter((l) => l.barrier);
+  /** Where each named wild region's label sits: the middle of its cells. */
+  private readonly regionCenters = REGIONS.map((g) => {
+    const c = new THREE.Vector3();
+    for (const [q, r] of g.cells) c.add(hexToWorld(q, r, SIZE));
+    return c.divideScalar(g.cells.length);
+  });
   private readonly fog = new THREE.Fog('#1d1622', 60, 140);
   /** Centre of the realm, and its half-extent on the ground (x, z). */
   private readonly realm = { center: new THREE.Vector3(), half: new THREE.Vector2(1, 1) };
@@ -149,13 +149,10 @@ export class MapView {
     box.getCenter(this.realm.center);
     this.realm.half.set((box.max.x - box.min.x) / 2 + HEX_R, (box.max.z - box.min.z) / 2 + HEX_R);
     this.basePose.target.copy(this.realm.center);
-    this.buildRoads();
   }
 
-  /** World position of a territory: two fine tiles from each of its neighbours. */
   private territoryPos(t: Territory): THREE.Vector3 {
-    const f = fineOf(t);
-    return hexToWorld(f.q, f.r, SIZE);
+    return hexToWorld(t.q, t.r, SIZE);
   }
 
   /** (Re)builds the land; the light preset gets fewer props far out. */
@@ -168,38 +165,10 @@ export class MapView {
         (m.material as THREE.Material).dispose();
       }
     }
-    this.land = buildLand(this.assets, SIZE, LAND_RADIUS, lite);
+    this.land = buildWild(this.assets, SIZE, BOARD_RADIUS, lite);
     this.landLite = lite;
     this.root.add(this.land.group);
     this.moodKey = -1;
-  }
-
-  /** A packed-earth road across the tile between two territories that border without a barrier. */
-  private buildRoads(): void {
-    const tex = roadTexture();
-    for (const link of borderLinks(SIZE)) {
-      if (link.barrier) continue;
-      const a = this.territoryPos(link.a);
-      const b = this.territoryPos(link.b);
-      const dir = b.clone().sub(a).normalize();
-      // From hex edge to hex edge (the territories' own tiles stay clean).
-      const from = a.clone().addScaledVector(dir, SIZE * 0.92);
-      const to = b.clone().addScaledVector(dir, -SIZE * 0.92);
-      const len = from.distanceTo(to);
-      const t = tex.clone();
-      t.needsUpdate = true;
-      t.repeat.set(1, len / 1.2);
-      const mat = new THREE.MeshStandardMaterial({ map: t, color: '#8a7a5a', roughness: 1, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-      const road = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W, len), mat);
-      road.rotation.x = -Math.PI / 2;
-      road.rotation.z = -Math.atan2(dir.x, dir.z);
-      // (the land is flattened to just below this along the road)
-      road.position.copy(from.clone().add(to).multiplyScalar(0.5)).setY(-0.115);
-      road.receiveShadow = true;
-      road.renderOrder = 1;
-      this.root.add(road);
-      this.roads.push({ link, mat });
-    }
   }
 
   // ---------------------------------------------------------------- construction
@@ -363,21 +332,13 @@ export class MapView {
       this.applyLook(n);
     }
     this.progress = liberated / this.nodes.size;
-    // Roads between liberated lands are open and bright; the rest are faded tracks.
-    for (const { link, mat } of this.roads) {
-      const free = (id: string) => this.nodes.get(id)?.status === 'liberated';
-      const both = free(link.a.id) && free(link.b.id);
-      const front = free(link.a.id) !== free(link.b.id);
-      mat.color.set(both ? '#fff2d4' : front ? '#e8cf96' : '#8a7a5a');
-      mat.opacity = both ? 1 : front ? 0.95 : 0.55;
-    }
   }
 
-  /** Screen positions (CSS px) of the barriers' name labels. */
-  barrierLabelPositions(): { name: string; kind: string; x: number; y: number }[] {
-    return this.barriers.map((l) => {
-        const v = l.pos.clone().setY(0.4).project(this.camera);
-      return { name: l.barrier!.name, kind: l.barrier!.kind, x: ((v.x + 1) / 2) * this.width, y: ((1 - v.y) / 2) * this.height };
+  /** Screen positions (CSS px) of the named wild regions' labels, in `REGIONS` order. */
+  regionLabelPositions(): { x: number; y: number }[] {
+    return this.regionCenters.map((c) => {
+      const v = c.clone().setY(0.6).project(this.camera);
+      return { x: ((v.x + 1) / 2) * this.width, y: ((1 - v.y) / 2) * this.height };
     });
   }
 
@@ -631,29 +592,3 @@ export class MapView {
   }
 }
 
-/** Packed earth: a pale track with darker ruts and soft edges, tiled along the road. */
-function roadTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = 32;
-  c.height = 64;
-  const g = c.getContext('2d')!;
-  const grad = g.createLinearGradient(0, 0, 32, 0);
-  grad.addColorStop(0, 'rgba(160,130,80,0)');
-  grad.addColorStop(0.18, 'rgba(176,146,96,0.9)');
-  grad.addColorStop(0.5, 'rgba(214,188,138,1)');
-  grad.addColorStop(0.82, 'rgba(176,146,96,0.9)');
-  grad.addColorStop(1, 'rgba(160,130,80,0)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 32, 64);
-  g.fillStyle = 'rgba(120,96,60,0.45)';
-  for (const x of [10, 21]) g.fillRect(x, 0, 2, 64);
-  for (let k = 0; k < 14; k++) {
-    g.fillStyle = `rgba(${90 + ((k * 37) % 60)},${80 + ((k * 23) % 40)},60,0.6)`;
-    g.fillRect(6 + ((k * 13) % 20), (k * 29) % 64, 2, 2);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.ClampToEdgeWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}

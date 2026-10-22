@@ -22,12 +22,13 @@ import { getCampaignWave, territoryWaveCount } from '../src/game/campaign/campai
 import { PERK_MAP } from '../src/game/campaign/perks';
 import { TERRAINS } from '../src/game/campaign/terrain';
 import {
-  BARRIERS,
-  blockedNeighbours,
+  BOARD_RADIUS,
   CAPITAL_TERRITORY,
   getTerritory,
   hexDistance,
   neighbours,
+  REGIONS,
+  regionAt,
   START_TERRITORY,
   TERRITORIES,
   territoryTier,
@@ -41,19 +42,30 @@ function memoryStore(): KeyValueStore {
 }
 
 describe('world map', () => {
-  it('is a radius-2 hex grid of 19 territories from the refuge to the capital', () => {
+  it('places 19 territories on the hex board, from the refuge to the capital', () => {
     expect(TERRITORIES).toHaveLength(19);
     const keys = new Set(TERRITORIES.map((t) => `${t.q},${t.r}`));
     expect(keys.size).toBe(19);
-    for (const t of TERRITORIES) expect(hexDistance(t, { q: 0, r: 0 })).toBeLessThanOrEqual(2);
+    for (const t of TERRITORIES) expect(hexDistance(t, { q: 0, r: 0 })).toBeLessThanOrEqual(3);
     expect(hexDistance(START_TERRITORY, CAPITAL_TERRITORY)).toBe(4);
   });
 
-  it('closes a few borders with barriers but keeps every territory reachable', () => {
-    for (const b of BARRIERS) {
-      expect(hexDistance(getTerritory(b.a), getTerritory(b.b))).toBe(1);
-      expect(neighbours(getTerritory(b.a)).map((t) => t.id)).not.toContain(b.b);
-      expect(blockedNeighbours(getTerritory(b.b)).map((x) => x.t.id)).toContain(b.a);
+  it('lays named wild regions on free cells, every territory still reachable from the refuge', () => {
+    const territoryAt = new Set(TERRITORIES.map((t) => `${t.q},${t.r}`));
+    for (const g of REGIONS) {
+      for (const [q, r] of g.cells) {
+        expect(territoryAt.has(`${q},${r}`)).toBe(false);
+        expect(hexDistance({ q, r }, { q: 0, r: 0 })).toBeLessThanOrEqual(BOARD_RADIUS);
+        expect(regionAt(q, r)).toBe(g);
+      }
+    }
+    // The lake keeps the goblin marsh apart from the hills; the ridge keeps the badlands off the arena.
+    expect(neighbours(getTerritory('t_mushroom')).map((t) => t.id)).not.toContain('t_fanghills');
+    expect(neighbours(getTerritory('t_ember')).map((t) => t.id)).not.toContain('t_arena');
+    // A territory's difficulty is how many battles away it is: it always borders an easier one.
+    for (const t of TERRITORIES) {
+      if (t.start || t.capital) continue;
+      expect(neighbours(t).some((n) => territoryTier(n) === territoryTier(t) - 1 || n.start)).toBe(true);
     }
     const seen = new Set([START_TERRITORY.id]);
     const queue = [START_TERRITORY];

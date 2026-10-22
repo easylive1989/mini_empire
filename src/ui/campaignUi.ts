@@ -16,7 +16,7 @@ import { getCampaignWave, territoryWaveCount } from '../game/campaign/campaignWa
 import { PERK_MAP } from '../game/campaign/perks';
 import { DEMON_LORD, LORE } from '../game/campaign/story';
 import { TERRAINS } from '../game/campaign/terrain';
-import { BARRIER_KIND_NAME, BARRIERS, blockedNeighbours, getTerritory, TERRITORIES, territoryTier, type Territory } from '../game/campaign/territories';
+import { getTerritory, REGIONS, TERRITORIES, territoryTier, WILD_KIND_NAME, type Territory } from '../game/campaign/territories';
 import { FACTIONS } from '../game/data/factions';
 import { getBuilding, getUnit, RACE_MAP } from '../game/data/index';
 import type { CutsceneFrame } from '../render/cutscene';
@@ -159,15 +159,15 @@ export class CampaignUi {
     h('span', {}, h('i', { class: 'lg-free' }), '已收復'),
     h('span', {}, h('i', { class: 'lg-attack' }), '可出征'),
     h('span', {}, h('i', { class: 'lg-enemy' }), '敵軍佔領'),
-    h('span', {}, h('i', { class: 'lg-wild' }), '山脈・湖泊・密林無法通行'),
+    h('span', {}, h('i', { class: 'lg-wild' }), '森林・山脈・湖泊無法進入'),
     h('span', { class: 'lg-hint' }, '滾輪縮放・拖曳移動'),
   );
   private readonly mapTop = h('div', { class: 'topbar hidden' });
   private readonly mapLeft = h('div', { class: 'panel left map-left hidden' });
   private readonly mapRight = h('div', { class: 'panel right map-right hidden' });
   private readonly labelEls = new Map<string, HTMLElement>();
-  /** Names of the barriers between territories, drawn over the map. */
-  private readonly barrierEls = BARRIERS.map((b) => h('span', { class: `barrier-label ${b.kind}` }, b.name, h('small', {}, BARRIER_KIND_NAME[b.kind])));
+  /** Names of the wild regions, drawn over the map. */
+  private readonly regionEls = REGIONS.map((g) => h('span', { class: `region-label ${g.kind}` }, g.name, h('small', {}, WILD_KIND_NAME[g.kind])));
   private lastLine = -1;
 
   constructor(
@@ -207,7 +207,7 @@ export class CampaignUi {
       this.labelEls.set(t.id, el);
       this.labels.append(el);
     }
-    for (const el of this.barrierEls) this.labels.append(el);
+    for (const el of this.regionEls) this.labels.append(el);
     root.append(this.labels, this.legend, this.mapTop, this.mapLeft, this.mapRight, this.cut, this.menu);
   }
 
@@ -586,17 +586,6 @@ export class CampaignUi {
       );
     }
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, `地形・${terrain.name}`)), h('p', { class: 'small' }, terrain.effect));
-    const blocked = blockedNeighbours(t);
-    if (blocked.length) {
-      nodes.push(
-        h(
-          'div',
-          { class: 'blocked-note' },
-          icon('lock', 14),
-          h('span', {}, blocked.map((x) => `與${x.t.name}之間隔著${x.barrier.name}（${BARRIER_KIND_NAME[x.barrier.kind]}）`).join('；'), '，無法直接進軍。'),
-        ),
-      );
-    }
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, '收復獎勵')), this.rewardCard(t));
     if (t.faction) {
       const best = territoryStars(c, t.id);
@@ -645,9 +634,9 @@ export class CampaignUi {
   }
 
   /** Repositions the territory labels over the 3D map. */
-  updateBarrierLabels(positions: { x: number; y: number }[]): void {
+  updateRegionLabels(positions: { x: number; y: number }[]): void {
     positions.forEach((p, k) => {
-      const el = this.barrierEls[k];
+      const el = this.regionEls[k];
       if (el) el.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) translate(-50%, -50%)`;
     });
   }

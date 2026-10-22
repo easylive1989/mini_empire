@@ -2,11 +2,12 @@ import type { FactionId } from '../data/factions';
 import type { TerrainId } from './terrain';
 
 /**
- * The world map: a radius-2 hex grid in axial coordinates (q, r).
- * The prince starts in the south-west corner; the fallen capital lies in the opposite corner.
- * The straight road (q + r = 0) goes through rebel land and one undead stronghold; the two flanks
- * belong to the goblins (q + r < 0) and the orcs (q + r > 0). Wild land lies between territories;
- * where it is a mountain range, a lake or a dense forest (`BARRIERS`), the two sides do not connect.
+ * The world map: a hex board in axial coordinates (q, r). Territories sit edge to edge; every other
+ * cell is wild land — forest, mountains, lakes, hills, marsh — that no army can enter, so two
+ * territories are neighbours only when their hexes touch.
+ * The prince starts in the south-west; the fallen capital lies in the north-east. The straight road
+ * (q + r = 0) goes through rebel land and one undead stronghold; the two flanks belong to the goblins
+ * (q + r < 0) and the orcs (q + r > 0).
  */
 export interface Territory {
   id: string;
@@ -31,13 +32,13 @@ export const TERRITORIES: Territory[] = [
   { id: 't_ravenhold', name: '黑鴉堡', q: 0, r: 0, faction: 'rebel', terrain: 'hills', desc: '篡位叛臣的大本營，扼守通往王城的大道。', reward: { perk: 'p_tower' } },
 
   // Goblins: the forested western flank.
-  { id: 't_whisper', name: '幽語森林', q: -2, r: 0, faction: 'goblin', terrain: 'forest', desc: '樹影間迴盪著哥布林的竊笑聲。', reward: { perk: 'p_range' } },
+  { id: 't_whisper', name: '幽語森林', q: -3, r: 1, faction: 'goblin', terrain: 'forest', desc: '樹影間迴盪著哥布林的竊笑聲。', reward: { perk: 'p_range' } },
   { id: 't_goblincave', name: '哥布林窟', q: -1, r: 0, faction: 'goblin', terrain: 'hills', desc: '哥布林工匠在洞窟裡打造危險的火箭。', reward: { unlock: 'sp_rocket' } },
-  { id: 't_mushroom', name: '蘑菇沼澤', q: -1, r: -1, faction: 'goblin', terrain: 'swamp', desc: '長滿巨大蘑菇的沼地，盛產珍貴藥草。', reward: { perk: 'p_heal' } },
+  { id: 't_mushroom', name: '蘑菇沼澤', q: -3, r: 0, faction: 'goblin', terrain: 'swamp', desc: '長滿巨大蘑菇的沼地，盛產珍貴藥草。', reward: { perk: 'p_heal' } },
   { id: 't_fanghills', name: '碎牙丘陵', q: 0, r: -1, faction: 'goblin', terrain: 'hills', desc: '哥布林王堆滿搶來的金銀財寶的巢穴。', reward: { perk: 'p_bounty' } },
 
   // Orcs: the scorched eastern flank.
-  { id: 't_ember', name: '赤焰荒原', q: 0, r: 2, faction: 'orc', terrain: 'badlands', desc: '終年燃燒的荒原，獸人戰團在此集結。', reward: { perk: 'p_dmg' } },
+  { id: 't_ember', name: '赤焰荒原', q: -1, r: 3, faction: 'orc', terrain: 'badlands', desc: '終年燃燒的荒原，獸人戰團在此集結。', reward: { perk: 'p_dmg' } },
   { id: 't_arena', name: '獸人鬥技場', q: 0, r: 1, faction: 'orc', terrain: 'badlands', desc: '最強的獸人勇士在這裡廝殺取樂。', reward: { unlock: 'sp_arena' } },
   { id: 't_frostfang', name: '霜牙山口', q: 1, r: 1, faction: 'orc', terrain: 'mountain', desc: '寒風刺骨的山口，獸人在此打造鐵甲。', reward: { perk: 'p_hp' } },
   { id: 't_oldvein', name: '古老礦脈', q: 1, r: 0, faction: 'orc', terrain: 'mine', desc: '矮人留下的古老礦坑，蘊藏大量黃金。', reward: { unlock: 'sp_deepmine' } },
@@ -74,43 +75,51 @@ export function territoryTier(t: Territory): number {
   return t.capital ? 5 : hexDistance(t, START_TERRITORY);
 }
 
-export type BarrierKind = 'mountains' | 'lake' | 'forest';
+/** Radius of the world map's board. */
+export const BOARD_RADIUS = 7;
 
-/** Wild land between two bordering territories that no army can cross. */
-export interface Barrier {
-  a: string;
-  b: string;
-  kind: BarrierKind;
+export type WildKind = 'forest' | 'mountains' | 'lake' | 'hills' | 'marsh' | 'badlands' | 'blight' | 'meadow';
+
+export const WILD_KIND_NAME: Record<WildKind, string> = {
+  forest: '森林',
+  mountains: '山脈',
+  lake: '湖泊',
+  hills: '丘陵',
+  marsh: '沼地',
+  badlands: '荒地',
+  blight: '焦土',
+  meadow: '原野',
+};
+
+/** A named stretch of wild land: a cluster of cells of one kind. */
+export interface Region {
   name: string;
+  kind: WildKind;
+  cells: [number, number][];
 }
-
-export const BARRIER_KIND_NAME: Record<BarrierKind, string> = { mountains: '山脈', lake: '湖泊', forest: '密林' };
 
 /**
- * The borders that are closed. None of them is on the straight road to the capital, so it can still
- * be taken in four battles; they make the flanks longer to sweep.
+ * The named wild lands. They sit where they shape the war: the forest and the lake cut the goblin
+ * marsh off from the middle, the two ridges fence in the orc lands, and the capital rises out of
+ * scorched earth. The rest of the board is wild land in the character of the territories nearby.
  */
-export const BARRIERS: Barrier[] = [
-  { a: 't_whisper', b: 't_goblincave', kind: 'forest', name: '幽暗密林' },
-  { a: 't_mushroom', b: 't_fanghills', kind: 'lake', name: '迷霧湖' },
-  { a: 't_ember', b: 't_frostfang', kind: 'mountains', name: '赤脊山' },
-  { a: 't_frostfang', b: 't_oldvein', kind: 'mountains', name: '霜脊山脈' },
-  { a: 't_wailing', b: 't_spring', kind: 'lake', name: '亡者之湖' },
+export const REGIONS: Region[] = [
+  { name: '幽暗密林', kind: 'forest', cells: [[-2, 0], [-4, 1], [-4, 0], [-5, 1], [-5, 0], [-4, -1], [-3, -1], [-5, 2]] },
+  { name: '迷霧湖', kind: 'lake', cells: [[-1, -1], [-2, -1], [-1, -2]] },
+  { name: '亡者之湖', kind: 'lake', cells: [[0, -3], [1, -3], [0, -4]] },
+  { name: '焦黑荒地', kind: 'blight', cells: [[2, -3], [3, -3], [3, -2], [4, -3], [4, -2]] },
+  { name: '霜脊山脈', kind: 'mountains', cells: [[2, 1], [3, 0], [3, -1], [4, -1], [4, 0], [3, 1]] },
+  { name: '赤脊山', kind: 'mountains', cells: [[0, 2], [1, 2], [0, 3]] },
 ];
 
-export function barrierBetween(a: string, b: string): Barrier | undefined {
-  return BARRIERS.find((x) => (x.a === a && x.b === b) || (x.a === b && x.b === a));
+const REGION_AT = new Map(REGIONS.flatMap((g) => g.cells.map(([q, r]) => [`${q},${r}`, g] as const)));
+
+/** The named region a board cell belongs to, if any. */
+export function regionAt(q: number, r: number): Region | undefined {
+  return REGION_AT.get(`${q},${r}`);
 }
 
-/** Territories one step away that an army can march to (bordering, and no barrier between). */
+/** Territories whose hexes touch this one's: the ones an army can march to. */
 export function neighbours(t: Territory): Territory[] {
-  return TERRITORIES.filter((o) => hexDistance(o, t) === 1 && !barrierBetween(o.id, t.id));
-}
-
-/** Bordering territories cut off by a barrier, with what lies between. */
-export function blockedNeighbours(t: Territory): { t: Territory; barrier: Barrier }[] {
-  return TERRITORIES.flatMap((o) => {
-    const barrier = hexDistance(o, t) === 1 ? barrierBetween(o.id, t.id) : undefined;
-    return barrier ? [{ t: o, barrier }] : [];
-  });
+  return TERRITORIES.filter((o) => hexDistance(o, t) === 1);
 }

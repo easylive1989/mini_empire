@@ -3756,8 +3756,8 @@ hr {
   color: var(--gold-hi);
 }
 
-/* ---------------------------------------------------------------- world map barriers */
-.barrier-label {
+/* ---------------------------------------------------------------- world map wild regions */
+.region-label {
   position: absolute;
   left: 0;
   top: 0;
@@ -3775,7 +3775,7 @@ hr {
   opacity: 0.85;
 }
 
-.barrier-label small {
+.region-label small {
   font-family: var(--sans);
   font-size: 10px;
   font-weight: 400;
@@ -3783,30 +3783,12 @@ hr {
   color: #d8c9a4;
 }
 
-.barrier-label.lake {
+.region-label.lake {
   color: #cfe8f0;
 }
 
 .map-legend .lg-wild {
   background: repeating-linear-gradient(135deg, #6b7a5a 0 3px, #8a8f80 3px 6px);
-}
-
-.blocked-note {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  padding: 8px 10px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(201, 163, 92, 0.35);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--text-3);
-}
-
-.blocked-note .ico {
-  margin-top: 2px;
-  color: var(--brass);
 }
 
 .map-legend .lg-hint {
