@@ -265,6 +265,8 @@ export class Effects {
   }
 
   update(dt: number): void {
+    // The camera glides between framings, so particle sizes follow its zoom every frame.
+    this.particles.setScale(1 / this.world.unitsPerPixel);
     this.particles.update(dt);
     this.rings = this.rings.filter((r) => {
       r.life -= dt;

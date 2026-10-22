@@ -21,6 +21,7 @@ import { BOONS, BOON_MAP } from './data/boons';
 import { BUILDINGS, getBuilding, RACE_MAP, raceBuildings, sortBuildings } from './data/index';
 import { Rng } from './rng';
 import type { BuildingDef, Modifiers, RaceId } from './types';
+import type { MvpRecord, SourceStats, StrengthSample } from './battle';
 
 export interface PlacedBuilding {
   uid: number;
@@ -52,6 +53,12 @@ export interface WaveReport {
   deaths: number;
   castleDamage: number;
   castleRepair: number;
+  /** Damage and kills by source (unit id, building id or `castle`), most damage first. */
+  sources: ({ key: string } & SourceStats)[];
+  mvp: MvpRecord | null;
+  timeline: StrengthSample[];
+  /** Seconds the wave lasted. */
+  duration: number;
 }
 
 /** What a finished battle reports back to the game state. */
@@ -63,6 +70,10 @@ export interface BattleOutcome {
   playerDeaths: number;
   /** Gold pocketed by goblin thieves this wave. */
   goldStolen?: number;
+  sources?: ({ key: string } & SourceStats)[];
+  mvp?: MvpRecord | null;
+  timeline?: StrengthSample[];
+  duration?: number;
 }
 
 /** A campaign battle for one territory of the world map. */
@@ -100,7 +111,7 @@ export interface GameState {
   report: WaveReport | null;
   nextUid: number;
   seed: number;
-  stats: { kills: number; deaths: number; goldEarned: number };
+  stats: { kills: number; deaths: number; goldEarned: number; castleDamage: number };
 }
 
 export type Check = { ok: true; cost: number } | { ok: false; reason: string; cost?: number };
@@ -133,7 +144,7 @@ export function newGame(race: RaceId, seed = Date.now()): GameState {
     report: null,
     nextUid: 1,
     seed: seed >>> 0,
-    stats: { kills: 0, deaths: 0, goldEarned: 0 },
+    stats: { kills: 0, deaths: 0, goldEarned: 0, castleDamage: 0 },
   };
   state.castleHp = castleMaxHp(state);
   return state;
@@ -517,6 +528,7 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
   state.castleHp = Math.max(0, outcome.castleHp);
   state.stats.kills += outcome.kills;
   state.stats.deaths += outcome.playerDeaths;
+  state.stats.castleDamage += castleDamage;
   const report: WaveReport = {
     wave,
     won: outcome.won,
@@ -526,6 +538,10 @@ export function applyBattleOutcome(state: GameState, outcome: BattleOutcome): Wa
     deaths: outcome.playerDeaths,
     castleDamage,
     castleRepair: 0,
+    sources: outcome.sources ?? [],
+    mvp: outcome.mvp ?? null,
+    timeline: outcome.timeline ?? [],
+    duration: outcome.duration ?? 0,
   };
   if (!outcome.won) {
     state.phase = 'over';

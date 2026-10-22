@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { Battle, simulateBattle, waveForState } from '../src/game/battle';
 import {
+  battleStars,
   campaignPerks,
   campaignUnlocks,
   createLevelState,
   isAttackable,
+  isReplayable,
   loadCampaign,
   newCampaign,
   recordBattle,
   saveCampaign,
   startingCastle,
   startingGold,
+  starTotal,
+  territoryStars,
+  SAVE_KEY,
   type KeyValueStore,
 } from '../src/game/campaign/campaign';
 import { getCampaignWave, territoryWaveCount } from '../src/game/campaign/campaignWaves';
@@ -79,6 +84,47 @@ describe('world map', () => {
     expect(rec.liberated).toBe(false);
     expect(c.conquered).toEqual([START_TERRITORY.id]);
     expect(c.battles).toBe(1);
+  });
+});
+
+describe('star ratings', () => {
+  it('rates a win by the castle damage taken over all waves', () => {
+    expect(battleStars(0, 1000)).toBe(3);
+    expect(battleStars(100, 1000)).toBe(3);
+    expect(battleStars(101, 1000)).toBe(2);
+    expect(battleStars(499, 1000)).toBe(2);
+    expect(battleStars(500, 1000)).toBe(1);
+    expect(battleStars(3000, 1000)).toBe(1);
+  });
+
+  it('keeps the best rating and lets liberated territories be fought again', () => {
+    const c = newCampaign('human');
+    expect(isReplayable(c, START_TERRITORY.id)).toBe(false);
+    expect(isReplayable(c, 't_wheat')).toBe(false);
+    const first = recordBattle(c, 't_wheat', true, 10, 2);
+    expect(first).toMatchObject({ liberated: true, stars: 2, prevStars: 0 });
+    expect(isReplayable(c, 't_wheat')).toBe(true);
+    const worse = recordBattle(c, 't_wheat', true, 10, 1);
+    expect(worse.liberated).toBe(false);
+    expect(territoryStars(c, 't_wheat')).toBe(2);
+    recordBattle(c, 't_wheat', false, 4);
+    expect(territoryStars(c, 't_wheat')).toBe(2);
+    recordBattle(c, 't_wheat', true, 10, 3);
+    expect(territoryStars(c, 't_wheat')).toBe(3);
+    expect(c.conquered.filter((id) => id === 't_wheat')).toHaveLength(1);
+    expect(starTotal(c)).toEqual({ got: 3, max: (TERRITORIES.length - 1) * 3 });
+  });
+
+  it('gives territories liberated before star ratings their first star', () => {
+    const store = memoryStore();
+    const c = newCampaign('elf');
+    recordBattle(c, 't_wheat', true, 5);
+    const old = { ...c } as Partial<typeof c>;
+    delete old.stars;
+    store.setItem(SAVE_KEY, JSON.stringify(old));
+    const loaded = loadCampaign(store)!;
+    expect(territoryStars(loaded, 't_wheat')).toBe(1);
+    expect(territoryStars(loaded, START_TERRITORY.id)).toBe(0);
   });
 });
 

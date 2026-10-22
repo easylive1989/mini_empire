@@ -1,10 +1,14 @@
 import './ui/styles.css';
 import { loadAudioPrefs, Music, saveAudioPrefs } from './audio/music';
 import { Sfx } from './audio/sfx';
+import { defeatTip } from './game/advisor';
 import { Battle } from './game/battle';
+import { BattleCallouts, type Callout } from './game/callouts';
 import {
+  battleStars,
   createLevelState,
   isAttackable,
+  isReplayable,
   isClassicUnlocked,
   loadCampaign,
   newCampaign,
@@ -16,7 +20,7 @@ import {
 } from './game/campaign/campaign';
 import { TERRAINS } from './game/campaign/terrain';
 import { getTerritory } from './game/campaign/territories';
-import { DT, FINAL_WAVE } from './game/constants';
+import { DT, FINAL_WAVE, GRID_RADIUS } from './game/constants';
 import { getBuilding, UNITS } from './game/data/index';
 import {
   applyBattleOutcome,
@@ -26,6 +30,7 @@ import {
   canUpgrade,
   canUpgradeCastle,
   castleMaxHp,
+  expansionCap,
   chooseBoon,
   continueEndless,
   demolish,
@@ -47,7 +52,7 @@ import { MapView } from './render/mapView';
 import { BuildingThumbs, renderRacePortraits } from './render/portraits';
 import { detectQuality, FrameWatch, loadQuality, PRESETS, saveQuality, type Quality } from './render/quality';
 import { TownView } from './render/town';
-import { CLASSIC_SETTING, World } from './render/world';
+import { CLASSIC_SETTING, World, type FocusBox } from './render/world';
 import { CampaignUi } from './ui/campaignUi';
 import { Ui, type Selection } from './ui/ui';
 
@@ -73,9 +78,14 @@ class App {
   private levelId: string | null = null;
   private mapSelected: string | null = null;
   private cutsceneKind: 'intro' | 'ending' = 'intro';
+  /** Where the intro film leads: the world map (a new campaign) or back to the title (a replay). */
+  private cutsceneReturn: 'map' | 'title' = 'map';
+  /** Set once the press-start gate has been passed this session. */
+  private titleSeen = false;
   private endingRecord: BattleRecord | null = null;
   private state: GameState | null = null;
   private battle: Battle | null = null;
+  private callouts = new BattleCallouts();
   private selection: Selection | null = null;
   private speed = 1;
   private acc = 0;
@@ -89,6 +99,7 @@ class App {
     const quality = saved ?? detectQuality();
     if (!saved && quality === 'high') this.frameWatch = new FrameWatch();
     this.world = new World(root, quality);
+    document.documentElement.classList.toggle('perf-low', quality === 'low');
     const prefs = loadAudioPrefs();
     this.sfx.setMuted(!prefs.sfx);
     this.music.setMuted(!prefs.music);
@@ -123,7 +134,9 @@ class App {
         newCampaign: () => this.openRaceSelect('campaign'),
         classic: () => this.openRaceSelect('classic'),
         exit: () => this.exit(),
-        skipCutscene: () => this.endCutscene(),
+        skipCutscene: () => this.skipCutscene(),
+        cue: (name) => this.cutsceneCue(name),
+        replayIntro: () => this.replayIntro(),
         selectTerritory: (id) => this.selectTerritory(id),
         attack: (id) => this.startLevel(id),
         backToTitle: () => this.goTitle(),
@@ -174,6 +187,7 @@ class App {
   private setQuality(q: Quality): void {
     this.frameWatch = null;
     const canvas = this.world.setQuality(q);
+    document.documentElement.classList.toggle('perf-low', q === 'low');
     if (canvas) this.bindCanvas(canvas);
     this.map.setQuality(q);
     this.ui.lowQuality = q === 'low';
@@ -205,8 +219,23 @@ class App {
     this.map.setSelected(null);
     this.map.mode = 'orbit';
     this.setMode('title');
-    this.cui.showTitleMenu(this.campaign, isClassicUnlocked());
+    this.cui.showTitleMenu(this.campaign, isClassicUnlocked(), { gate: !this.titleSeen, onStart: () => this.titleStart() });
+    // Before the press-start gate the browser keeps audio locked: the music starts on the logo slam.
+    if (this.titleSeen) this.music.play('title');
+  }
+
+  /** The press-start gate was passed: the logo slams in on a fanfare and the title music starts. */
+  private titleStart(): void {
+    this.titleSeen = true;
+    this.sfx.play('slam');
     this.music.play('title');
+  }
+
+  private replayIntro(): void {
+    if (!this.campaign) return;
+    this.sfx.play('click');
+    this.cutsceneReturn = 'title';
+    this.startCutscene('intro');
   }
 
   private openRaceSelect(mode: 'campaign' | 'classic'): void {
@@ -235,6 +264,7 @@ class App {
       saveCampaign(this.campaign);
       this.ui.closeOverlay();
       this.mapSelected = null;
+      this.cutsceneReturn = 'map';
       this.startCutscene('intro');
       return;
     }
@@ -246,6 +276,7 @@ class App {
     this.ui.closeOverlay();
     this.setMode('classic');
     this.refresh(false);
+    this.world.setFocus(this.focusFor(this.state), this.ui.insets, true);
     this.onResize();
     this.music.play('battle');
     this.ui.banner('第 1 波即將來襲', '點選空地建造建築，準備好就開戰！');
@@ -268,15 +299,29 @@ class App {
     this.music.play(kind === 'intro' ? 'story' : 'ending');
   }
 
+  /** Skip: first to the finale's logo slam, then (pressed again) out of the cutscene. */
+  private skipCutscene(): void {
+    if (this.mode !== 'cutscene') return;
+    if (this.cutscene.atFinale) this.endCutscene();
+    else this.cutscene.skipToFinale();
+  }
+
+  private cutsceneCue(name: 'card' | 'slam'): void {
+    this.sfx.play(name);
+    // The intro's title lands on the world map: the adventure's theme takes over on the slam.
+    if (name === 'slam' && this.cutsceneKind === 'intro') this.music.play('map');
+  }
+
   private endCutscene(): void {
     if (this.mode !== 'cutscene') return;
     this.cutscene.skip();
     if (this.cutsceneKind === 'intro') {
-      this.goMap();
+      if (this.cutsceneReturn === 'title') this.goTitle();
+      else this.goMap();
       return;
     }
     const c = this.campaign!;
-    const rec = this.endingRecord ?? { liberated: true, capital: true, allLiberated: false };
+    const rec = this.endingRecord ?? { liberated: true, capital: true, allLiberated: false, stars: 1, prevStars: 0 };
     this.goMap();
     this.music.play('ending');
     this.cui.showEnding(
@@ -298,7 +343,7 @@ class App {
     this.map.setCampaign(c, c.race);
     this.map.mode = 'map';
     if (conquered) this.map.playConquest(conquered);
-    if (!this.mapSelected || !isAttackable(c, this.mapSelected)) this.mapSelected = conquered ?? null;
+    if (!this.mapSelected || !(isAttackable(c, this.mapSelected) || isReplayable(c, this.mapSelected))) this.mapSelected = conquered ?? null;
     this.map.setSelected(this.mapSelected);
     this.cui.showMap(c, this.mapSelected);
     this.setMode('map');
@@ -328,6 +373,7 @@ class App {
     this.ui.closeOverlay();
     this.setMode('level');
     this.refresh(false);
+    this.world.setFocus(this.focusFor(this.state), this.ui.insets, true);
     this.onResize();
     this.music.play('battle');
     this.ui.banner(t.name, TERRAINS[t.terrain].effect);
@@ -355,11 +401,29 @@ class App {
 
   // ---------------------------------------------------------------- level helpers
 
+  /**
+   * What the camera frames: while preparing, the plot (with the ring you can still expand into) and the
+   * near field; in battle, your land and the field up to where the enemy marches in.
+   */
+  private focusFor(state: GameState): FocusBox {
+    const owned = state.tiles.filter((t) => t.owned);
+    const ext = {
+      minI: Math.min(...owned.map((t) => t.i)),
+      maxI: Math.max(...owned.map((t) => t.i)),
+      minJ: Math.min(...owned.map((t) => t.j)),
+      maxJ: Math.max(...owned.map((t) => t.j)),
+    };
+    if (this.battle) return World.battleFocus(ext);
+    const radius = Math.max(-ext.minI, ext.maxI, -ext.minJ, ext.maxJ);
+    return World.plotFocus(state.expansions < expansionCap(state) ? Math.min(GRID_RADIUS, radius + 1) : radius);
+  }
+
   private refresh(animate = true): void {
     if (!this.state) return;
     this.town.sync(this.state, animate);
     this.town.setSelected(this.selection);
     this.ui.render(this.state, this.selection, this.battle);
+    this.world.setFocus(this.focusFor(this.state), this.ui.insets);
   }
 
   private select(sel: Selection | null): void {
@@ -469,6 +533,7 @@ class App {
     this.town.setSelected(null);
     this.town.setHover(null);
     this.battle = new Battle(s);
+    this.callouts = new BattleCallouts();
     this.battleView.begin(this.battle);
     this.acc = 0;
     this.sfx.play('horn');
@@ -485,12 +550,13 @@ class App {
     this.battle = null;
     this.battleView.end();
     const report = applyBattleOutcome(s, outcome);
+    const tip = outcome.won ? undefined : defeatTip(s, b.waveDef, { bossSurvived: !!b.boss });
     this.refresh(false);
     this.music.play('battle');
-    if (this.mode === 'level') return this.finishLevelWave(s, report.wave, report.total);
+    if (this.mode === 'level') return this.finishLevelWave(s, report.wave, report.total, tip);
     if (s.phase === 'over') {
       this.sfx.play('defeat');
-      this.ui.showGameOver(s);
+      this.ui.showGameOver(s, tip);
       return;
     }
     this.sfx.play('coin');
@@ -502,7 +568,7 @@ class App {
     }
   }
 
-  private finishLevelWave(s: GameState, wave: number, gold: number): void {
+  private finishLevelWave(s: GameState, wave: number, gold: number, tip?: string): void {
     const c = this.campaign!;
     const id = this.levelId!;
     if (s.phase === 'over') {
@@ -510,7 +576,7 @@ class App {
       saveCampaign(c);
       this.sfx.play('defeat');
       this.music.play('story');
-      this.ui.showGameOver(s);
+      this.ui.showGameOver(s, tip);
       return;
     }
     if (s.phase !== 'victory') {
@@ -518,13 +584,13 @@ class App {
       this.ui.banner(`第 ${wave} 波勝利！`, `+${gold} 金`);
       return;
     }
-    const rec = recordBattle(c, id, true, s.stats.kills);
+    const rec = recordBattle(c, id, true, s.stats.kills, battleStars(s.stats.castleDamage, castleMaxHp(s)));
     saveCampaign(c);
     if (rec.capital) unlockClassic();
     this.sfx.play('victory');
     this.music.play('ending');
     this.ui.hideHud();
-    this.cui.showLiberated(c, id, s.stats.kills, s.castleHp / castleMaxHp(s), () => {
+    this.cui.showLiberated(c, id, rec, s.stats.kills, s.stats.castleDamage / castleMaxHp(s), () => {
       if (rec.capital) {
         this.endingRecord = rec;
         this.mapSelected = null;
@@ -532,8 +598,9 @@ class App {
         this.startCutscene('ending');
         return;
       }
-      this.goMap(id);
-      if (rec.allLiberated) this.cui.showFullClear(c, () => this.cui.showMap(c, this.mapSelected));
+      // A replay for stars changes nothing on the map: no conquest to play again.
+      this.goMap(rec.liberated ? id : undefined);
+      if (rec.liberated && rec.allLiberated) this.cui.showFullClear(c, () => this.cui.showMap(c, this.mapSelected));
     });
   }
 
@@ -579,7 +646,10 @@ class App {
 
   private onKey(e: KeyboardEvent): void {
     if (this.mode === 'cutscene') {
-      if (e.key === 'Escape') this.endCutscene();
+      if (e.key === 'Escape' || e.key === 'Enter' || e.code === 'Space') {
+        e.preventDefault();
+        this.skipCutscene();
+      }
       return;
     }
     if (this.mode === 'title' && e.key === 'Enter' && this.campaign) {
@@ -657,13 +727,23 @@ class App {
     requestAnimationFrame(() => this.loop());
   }
 
+  /** Shows a battle callout: a banner for the big moments, a ticker line for the rest. */
+  private announce(c: Callout): void {
+    if (c.banner) this.ui.banner(c.banner.title, c.banner.sub);
+    else this.ui.toast(c.text, c.kind, 2600);
+    if (c.turn) this.ui.setMeter(this.callouts.share, c.turn);
+    if (c.banner && c.kind === 'good') this.sfx.play('boon');
+  }
+
   private stepBattle(dt: number): void {
     if (!this.battle) return;
     this.acc += dt * this.speed;
     let steps = 0;
     while (this.acc >= DT && steps < 16) {
       this.battle.step(DT);
-      this.battleView.handleEvents(this.battle.drainEvents());
+      const events = this.battle.drainEvents();
+      for (const c of this.callouts.feed(this.battle, events)) this.announce(c);
+      this.battleView.handleEvents(events);
       this.acc -= DT;
       steps++;
     }
@@ -673,6 +753,7 @@ class App {
     if (this.uiTimer <= 0) {
       this.uiTimer = 0.25;
       this.ui.updateBattle(this.battle);
+      this.ui.setMeter(this.callouts.share, null);
     }
     if (this.battle.finished) this.finishWave();
   }

@@ -1,3 +1,4 @@
+import { adviceFor, analyzeWave, badgeFor, type Threat } from '../game/advisor';
 import { waveForState, type Battle } from '../game/battle';
 import { campaignPerkDefs } from '../game/campaign/campaign';
 import { getCampaignWave } from '../game/campaign/campaignWaves';
@@ -35,6 +36,7 @@ import type { BuildingDef, BuildingKind, RaceId, UnitDef } from '../game/types';
 import { RACE_MASCOT } from '../render/portraits';
 import { coin, h } from './dom';
 import { coinIcon, crest, icon, type IconName } from './icons';
+import { clock, damageRows, mvpCard, strengthChart } from './report';
 
 const KIND_LABEL: Record<Exclude<BuildingKind, 'castle'>, string> = { resource: '資源', tower: '防禦塔', support: '支援', barracks: '兵營' };
 
@@ -154,6 +156,8 @@ export class Ui {
   private speed = 1;
   private buildTab: BuildTab = 'all';
   private mouse = { x: -1000, y: -1000 };
+  /** Treasury at the last top-bar render, so the gold pill can bump on income and flash on spending. */
+  private lastGold: number | null = null;
   audio: AudioState = { music: true, sfx: true };
   lowQuality = false;
   /** Rendered portraits of each race's mascot unit for the race picker. */
@@ -168,6 +172,9 @@ export class Ui {
     bonuses?: HTMLElement;
     hpFill?: HTMLElement;
     hpText?: HTMLElement;
+    meter?: HTMLElement;
+    meterFill?: HTMLElement;
+    meterNote?: HTMLElement;
     rows: Map<string, { count: HTMLElement; fill: HTMLElement; total: number }>;
   } = { rows: new Map() };
 
@@ -185,7 +192,9 @@ export class Ui {
   /** Free screen area the 3D view should frame. */
   get insets() {
     const inGame = !this.left.classList.contains('hidden');
-    return inGame ? { left: 336, right: 332, top: 80, bottom: 100 } : { left: 40, right: 40, top: 40, bottom: 40 };
+    if (!inGame) return { left: 40, right: 40, top: 40, bottom: 40 };
+    // In battle the side panels shrink to their top corners, so the field may run under their edges.
+    return this.left.classList.contains('compact') ? { left: 150, right: 150, top: 70, bottom: 96 } : { left: 336, right: 332, top: 80, bottom: 100 };
   }
 
   // ---------------------------------------------------------------- loading & toasts
@@ -202,11 +211,11 @@ export class Ui {
     this.loading.classList.add('hidden');
   }
 
-  toast(msg: string, kind: 'bad' | 'good' | '' = '', ms = 2200): void {
+  toast(msg: string, kind: 'bad' | 'good' | 'info' | '' = '', ms = 2200): void {
     const t = h('div', { class: `toast ${kind}` }, msg);
     this.toasts.append(t);
     setTimeout(() => t.remove(), ms);
-    while (this.toasts.children.length > 4) this.toasts.firstChild?.remove();
+    while (this.toasts.children.length > 3) this.toasts.firstChild?.remove();
   }
 
   banner(text: string, sub = ''): void {
@@ -359,6 +368,8 @@ export class Ui {
   /** Hides the in-game HUD panels and any modal. */
   hideHud(): void {
     for (const p of [this.top, this.left, this.right, this.bottom, this.bossBar]) p.classList.add('hidden');
+    this.toasts.classList.remove('under-boss');
+    this.lastGold = null;
     this.closeOverlay();
   }
 
@@ -390,7 +401,7 @@ export class Ui {
     this.live.hpText = h('span', { class: 'num' }, `${Math.round(state.castleHp)} / ${max}`);
     this.top.replaceChildren(
       h('div', { class: 'hud-crest' }, crest(r.color, 26), h('div', {}, h('b', {}, r.name), h('small', {}, `${r.castleName} Lv.${state.castleLevel}`))),
-      h('div', { class: 'gold-pill', title: '金幣' }, coinIcon(20), h('span', { class: 'num' }, String(state.gold))),
+      this.goldPill(state.gold),
       h(
         'div',
         { class: 'hp' },
@@ -408,6 +419,17 @@ export class Ui {
           : null,
       ),
     );
+  }
+
+  /** Treasury readout: bumps when gold comes in, flashes red when it is spent. */
+  private goldPill(gold: number): HTMLElement {
+    const pill = h('div', { class: 'gold-pill', title: '金幣' }, coinIcon(20), h('span', { class: 'num' }, String(gold)));
+    if (this.lastGold !== null && gold !== this.lastGold) {
+      pill.classList.add(gold > this.lastGold ? 'gain' : 'spend');
+      pill.append(h('span', { class: `gold-delta ${gold > this.lastGold ? 'gain' : 'spend'}` }, gold > this.lastGold ? `+${gold - this.lastGold}` : `−${this.lastGold - gold}`));
+    }
+    this.lastGold = gold;
+    return pill;
   }
 
   /** Territory/wave title with wave pips in the middle of the top bar. */
@@ -495,7 +517,18 @@ export class Ui {
 
   private renderBottom(state: GameState, battle: Battle | null): void {
     if (battle) {
+      this.live.meterFill = h('i', { style: 'width:50%' });
+      this.live.meterNote = h('span', { class: 'tug-note' }, '雙方交戰中');
+      this.live.meter = h(
+        'div',
+        { class: 'tug dim', role: 'img', 'aria-label': '戰場優勢' },
+        h('span', { class: 'tug-side ours' }, '我軍'),
+        h('div', { class: 'tug-bar' }, this.live.meterFill, h('b', { class: 'tug-mid' })),
+        h('span', { class: 'tug-side theirs' }, '敵軍'),
+        this.live.meterNote,
+      );
       this.bottom.replaceChildren(
+        this.live.meter,
         h(
           'div',
           { class: 'speed-bar' },
@@ -541,6 +574,30 @@ export class Ui {
     this.speed = speed;
   }
 
+  /**
+   * Tug-of-war meter: our share of the fighting strength on the field (null while one side has
+   * nobody there); `turned` flashes it when the lead just changed hands.
+   */
+  setMeter(share: number | null, turned: 'good' | 'bad' | null): void {
+    const { meter, meterFill, meterNote } = this.live;
+    if (!meter || !meterFill || !meterNote) return;
+    meter.classList.toggle('dim', share === null);
+    if (share !== null) {
+      meterFill.style.width = `${(share * 100).toFixed(1)}%`;
+      meterNote.textContent = share >= 0.62 ? '我軍佔優' : share <= 0.38 ? '敵軍佔優' : '勢均力敵';
+      meter.classList.toggle('winning', share >= 0.62);
+      meter.classList.toggle('losing', share <= 0.38);
+    } else {
+      meterNote.textContent = '等待交戰';
+      meter.classList.remove('winning', 'losing');
+    }
+    if (turned) {
+      meter.classList.remove('turn-good', 'turn-bad');
+      void meter.offsetWidth;
+      meter.classList.add(`turn-${turned}`);
+    }
+  }
+
   /** Cheap refresh of live battle numbers (called a few times per second). */
   updateBattle(battle: Battle): void {
     const L = this.live;
@@ -574,6 +631,7 @@ export class Ui {
 
   private updateBossBar(battle: Battle): void {
     const boss = battle.boss;
+    this.toasts.classList.toggle('under-boss', !!boss);
     if (!boss) {
       this.bossBar.classList.add('hidden');
       return;
@@ -634,6 +692,7 @@ export class Ui {
           h('div', {}, icon('flag', 18), h('span', {}, '點選外圍土地擴張領地')),
         ),
         h('p', { class: 'muted small' }, h('span', { class: 'kbd' }, 'Esc'), ' 取消選取・', h('span', { class: 'kbd' }, 'U'), ' 升級選取的建築'),
+        ...this.waveReport(state),
       );
       return;
     }
@@ -645,6 +704,29 @@ export class Ui {
     else el.replaceChildren(h('div', { class: 'p-head' }, h('h2', {}, '荒野')), h('div', { class: 'hint' }, '這塊土地離領地太遠，先擴張相鄰的土地。'));
   }
 
+  /** After-action report of the last wave: strength over time, MVP, damage ranking, losses and income. */
+  private waveReport(state: GameState): Node[] {
+    const rep = state.report;
+    if (!rep) return [];
+    const nodes: (Node | null)[] = [
+      h('div', { class: 'sec-title' }, h('span', {}, `上一波戰報・第 ${rep.wave} 波`), rep.duration ? h('small', { class: 'num' }, clock(rep.duration)) : null),
+      strengthChart(rep.timeline),
+      rep.mvp ? mvpCard(rep.mvp) : null,
+      rep.sources.length ? h('div', { class: 'sub-title' }, '輸出排行') : null,
+      rep.sources.length ? damageRows(rep.sources) : null,
+      h(
+        'div',
+        { class: 'kv-list' },
+        h('div', { class: 'kv' }, h('span', {}, '擊殺'), h('b', { class: 'num' }, String(rep.kills))),
+        h('div', { class: 'kv' }, h('span', {}, '我方陣亡'), h('b', { class: 'num' }, String(rep.deaths))),
+        h('div', { class: 'kv' }, h('span', {}, '主堡受損'), h('b', { class: `num ${rep.castleDamage ? 'bad' : ''}` }, String(rep.castleDamage))),
+        rep.castleRepair ? h('div', { class: 'kv' }, h('span', {}, '聖所修復'), h('b', { class: 'num good' }, `+${rep.castleRepair}`)) : null,
+        ...rep.income.map((l) => h('div', { class: `kv ${l.amount < 0 ? 'bad' : ''}` }, h('span', {}, l.label), h('b', { class: `num ${l.amount < 0 ? '' : 'gold'}` }, l.amount < 0 ? `${l.amount}` : `+${l.amount}`))),
+      ),
+    ];
+    return nodes.filter((n): n is Node => !!n);
+  }
+
   private buildPanel(state: GameState, sel: Selection): Node[] {
     const all = availableBuildings(state);
     // Only what can be built now: castle-level locks and specials already placed stay out of the list.
@@ -654,6 +736,8 @@ export class Ui {
     const tab = this.buildTab;
     const inTab = (b: BuildingDef) => (tab === 'all' ? true : tab === 'special' ? !!b.campaignOnly : !b.campaignOnly && (b.kind === tab || (tab === 'tower' && b.kind === 'support')));
     const shown = buildable.filter(inTab);
+    const threats = analyzeWave(state, waveForState(state));
+    const urgent = (b: BuildingDef) => badgeFor(b, threats).some((t) => t.severity === 'warn');
     const front = sel.i === Math.max(...state.tiles.filter((t) => t.owned).map((t) => t.i));
     const nextLevel = Math.min(...all.filter((b) => b.castleLevel > state.castleLevel).map((b) => b.castleLevel));
     const upcoming = Number.isFinite(nextLevel) ? all.filter((b) => b.castleLevel === nextLevel) : [];
@@ -680,11 +764,14 @@ export class Ui {
               },
             },
             label,
+            id !== 'all' && buildable.some((b) => (id === 'special' ? !!b.campaignOnly : !b.campaignOnly && (b.kind === id || (id === 'tower' && b.kind === 'support'))) && urgent(b))
+              ? h('i', { class: 'tab-dot', title: '有克制下一波威脅的建築' })
+              : null,
           ),
         ),
       ),
       shown.length
-        ? h('div', { class: 'build-grid' }, shown.map((d) => this.buildCard(state, sel, d)))
+        ? h('div', { class: 'build-grid' }, shown.map((d) => this.buildCard(state, sel, d, threats)))
         : h('div', { class: 'hint' }, '這個分類目前沒有可建造的建築。'),
       upcoming.length
         ? h(
@@ -698,8 +785,9 @@ export class Ui {
     ].filter((n): n is HTMLDivElement => !!n);
   }
 
-  private buildCard(state: GameState, sel: Selection, def: BuildingDef): HTMLElement {
+  private buildCard(state: GameState, sel: Selection, def: BuildingDef, threats: Threat[]): HTMLElement {
     const poor = !canBuild(state, sel.i, sel.j, def.id).ok;
+    const counters = badgeFor(def, threats);
     let sub: string;
     if (def.kind === 'barracks') {
       const u = getUnit(def.unit!);
@@ -712,15 +800,17 @@ export class Ui {
     const card = h(
       'button',
       {
-        class: `bcard kind-${kind} ${poor ? 'poor' : ''}`,
+        class: `bcard kind-${kind} ${poor ? 'poor' : ''} ${counters.length ? 'counter' : ''} ${counters.some((t) => t.severity === 'warn') ? 'urgent' : ''}`,
         onclick: () => this.actions.build(def.id),
       },
       h('span', { class: 'bc-top' }, h('span', { class: 'k' }, def.campaignOnly ? '特殊' : KIND_LABEL[def.kind as keyof typeof KIND_LABEL]), h('span', { class: 'cost num' }, coin(), String(buildCost(state, def)))),
       thumb ? h('span', { class: 'bc-img' }, h('img', { src: thumb, alt: '', draggable: 'false' })) : null,
+      counters.length ? h('span', { class: 'bc-counter' }, icon('swords', 11, { strokeWidth: 2.4 }), counters.map((t) => t.tag).join('・')) : null,
       h('span', { class: 'nm' }, def.name),
       h('span', { class: 'sb' }, sub),
     );
-    return this.tip(card, () => this.buildingTip(def));
+    const counterLine = counters.length ? `<div class="tip-counter">克制下一波：${counters.map((t) => `${t.name}（×${t.count}）`).join('、')}</div>` : '';
+    return this.tip(card, () => this.buildingTip(def) + counterLine);
   }
 
   private buildingTip(def: BuildingDef): string {
@@ -915,7 +1005,7 @@ export class Ui {
     }
 
     const r = RACE_MAP.get(state.race)!;
-    const nodes: Node[] = [h('div', { class: 'p-head' }, h('div', { class: 'eyebrow' }, `下一波・第 ${state.wave} 波`), h('h2', {}, wave.title ?? '敵軍來襲'))];
+    const nodes: (Node | null)[] = [h('div', { class: 'p-head' }, h('div', { class: 'eyebrow' }, `下一波・第 ${state.wave} 波`), h('h2', {}, wave.title ?? '敵軍來襲'))];
     nodes.push(
       h(
         'div',
@@ -940,6 +1030,14 @@ export class Ui {
     if (upcoming) {
       const u = getUnit(upcoming.unit);
       nodes.push(h('div', { class: 'boss-card' }, icon('skull', 20), h('span', {}, `第 ${upcoming.wave} 波首領：`, h('b', {}, u.name), h('br'), h('small', {}, firstClause(u.desc)))));
+    }
+    const threats = analyzeWave(state, wave);
+    if (threats.length) {
+      const open = threats.filter((t) => t.severity === 'warn').length;
+      nodes.push(
+        h('div', { class: 'sec-title' }, h('span', {}, '威脅分析'), h('small', { class: open ? 'bad' : '' }, open ? `${open} 項沒有對策` : '都有對策')),
+        h('div', { class: 'threats' }, threats.map((t) => this.threatRow(t))),
+      );
     }
     const income = projectedIncome(state);
     const thieves = wave.groups.some((g) => g.unit === 'g_thief') || wave.boss === 'g_king';
@@ -985,26 +1083,29 @@ export class Ui {
         })),
       );
     }
-    if (state.report) {
-      const rep = state.report;
-      nodes.push(
-        h('div', { class: 'sec-title' }, h('span', {}, `上一波戰報・第 ${rep.wave} 波`)),
-        h(
-          'div',
-          { class: 'kv-list' },
-          h('div', { class: 'kv' }, h('span', {}, '擊殺'), h('b', { class: 'num' }, String(rep.kills))),
-          h('div', { class: 'kv' }, h('span', {}, '我方陣亡'), h('b', { class: 'num' }, String(rep.deaths))),
-          h('div', { class: 'kv' }, h('span', {}, '主堡受損'), h('b', { class: 'num' }, String(rep.castleDamage))),
-          rep.castleRepair ? h('div', { class: 'kv' }, h('span', {}, '聖所修復'), h('b', { class: 'num good' }, `+${rep.castleRepair}`)) : null,
-          ...rep.income.map((l) => h('div', { class: `kv ${l.amount < 0 ? 'bad' : ''}` }, h('span', {}, l.label), h('b', { class: `num ${l.amount < 0 ? '' : 'gold'}` }, l.amount < 0 ? `${l.amount}` : `+${l.amount}`))),
-        ),
-      );
-    }
     if (state.level) {
       const terrain = TERRAINS[state.level.terrain];
       nodes.push(h('div', { class: 'info-card terrain' }, h('b', {}, `地形・${terrain.name}`), '　', terrain.effect));
     }
-    this.right.replaceChildren(...nodes);
+    this.right.replaceChildren(...nodes.filter((n): n is Node => !!n));
+  }
+
+  /** One line of the threat analysis: the threat, who poses it and what answers it. */
+  private threatRow(t: Threat): HTMLElement {
+    const ico: IconName = t.severity === 'ok' ? 'check' : t.severity === 'warn' ? 'warn' : 'target';
+    const row = h(
+      'div',
+      { class: `threat ${t.severity}` },
+      h('span', { class: 'th-ico' }, icon(ico, 15, { strokeWidth: 2.2 })),
+      h('span', { class: 'th-body' }, h('b', {}, t.name, t.id === 'boss' ? null : h('em', { class: 'num' }, ` ×${t.count}`)), h('small', {}, adviceFor(t))),
+    );
+    return this.tip(row, () => {
+      const lines = [`<b>${t.name}</b>：${t.units.join('、')}`, `<span class="muted">對策：${t.answer}</span>`];
+      if (t.have.length) lines.push(`你已有：${t.have.join('、')}`);
+      if (t.suggest.length) lines.push(`現在可蓋：${t.suggest.join('、')}`);
+      if (t.later.length) lines.push(`<span class="muted">之後解鎖：${t.later.map(([lv, n]) => `${n}（主堡 Lv.${lv}）`).join('、')}</span>`);
+      return lines.join('<br>');
+    });
   }
 
   /** The next boss after the current wave (campaign: the territory's last wave). */
@@ -1051,9 +1152,10 @@ export class Ui {
     this.openOverlay(modal);
   }
 
-  showGameOver(state: GameState): void {
+  showGameOver(state: GameState, tip?: string): void {
     const r = RACE_MAP.get(state.race)!;
     const level = state.level;
+    const rep = state.report;
     const modal = ornate(
       h(
         'div',
@@ -1063,6 +1165,8 @@ export class Ui {
         h('h1', {}, level ? level.name : `${r.name}王國`),
         h('p', { class: 'subtitle' }, level ? `守軍擊退了我們（第 ${state.wave} / ${level.totalWaves} 波）。重整旗鼓，再戰一次！` : `王國在第 ${state.wave} 波倒下了。`),
         this.summary(state),
+        rep && rep.timeline.length > 1 ? h('div', { class: 'report-box' }, h('div', { class: 'eyebrow' }, `最後一戰・第 ${rep.wave} 波`), strengthChart(rep.timeline, 360, 64)) : null,
+        tip ? h('div', { class: 'tip-card' }, icon('scroll', 20), h('span', {}, h('small', {}, '敗因分析'), tip)) : null,
         h(
           'div',
           { class: 'modal-actions' },

@@ -14,9 +14,25 @@ export interface ViewInsets {
   bottom: number;
 }
 
-/** Fixed camera direction: enemies (+X) arrive from the lower right of the screen. */
-const VIEW_DIR = new THREE.Vector3(0.57, 0, 0.82).normalize().multiplyScalar(Math.cos(THREE.MathUtils.degToRad(50)));
-VIEW_DIR.y = Math.sin(THREE.MathUtils.degToRad(50));
+/** Ground area the battle camera keeps in view (world units, x towards the enemy). */
+export interface FocusBox {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Fixed camera direction: enemies (+X) arrive from the lower right of the screen. A 42° pitch sits
+ * close enough to the field to read the fight, steep enough that the plot's back row stays clear.
+ */
+const PITCH = 42;
+const VIEW_DIR = new THREE.Vector3(0.57, 0, 0.82).normalize().multiplyScalar(Math.cos(THREE.MathUtils.degToRad(PITCH)));
+VIEW_DIR.y = Math.sin(THREE.MathUtils.degToRad(PITCH));
+/** Seconds the camera takes to glide to a new focus. */
+const GLIDE = 0.9;
+/** Height of the tallest buildings, so the back row's roofs are never cut off. */
+const ROOF = 5;
 
 export class World {
   renderer: THREE.WebGLRenderer;
@@ -36,6 +52,34 @@ export class World {
   private readonly target = new THREE.Vector3(14, 0, 0);
   private frame = 0;
   private lastScene: THREE.Scene | null = null;
+  /** What the camera frames: the whole plot by default (race preview, prep before the first sync). */
+  private focus: FocusBox = World.plotFocus(GRID_RADIUS);
+  /** Current and goal view (view-space centre and world units per pixel), eased between on focus changes. */
+  private view = { cx: 0, cy: 0, upp: 0.05 };
+  private from = { cx: 0, cy: 0, upp: 0.05 };
+  private goal = { cx: 0, cy: 0, upp: 0.05 };
+  private glideT = 1;
+  private lastDraw = performance.now();
+
+  /** The plot out to `radius` tiles around the castle plus the near battlefield (preparation). */
+  static plotFocus(radius: number): FocusBox {
+    const r = radius * TILE + TILE / 2;
+    return { minX: -r, maxX: Math.max(r, 20), minZ: -r, maxZ: r };
+  }
+
+  /**
+   * Your owned land and the field where the armies meet, up to where the enemy marches in; their camp
+   * further out may fall off screen.
+   */
+  static battleFocus(owned: { minI: number; maxI: number; minJ: number; maxJ: number }): FocusBox {
+    const pad = TILE / 2;
+    return {
+      minX: owned.minI * TILE - pad,
+      maxX: SPAWN_X - 8,
+      minZ: Math.min(owned.minJ * TILE - pad, -8),
+      maxZ: Math.max(owned.maxJ * TILE + pad, 8),
+    };
+  }
 
   constructor(
     container: HTMLElement,
@@ -95,6 +139,9 @@ export class World {
 
   /** Draw any scene; the light preset only refreshes shadow maps every few frames. */
   draw(scene: THREE.Scene, camera: THREE.Camera): void {
+    const now = performance.now();
+    if (camera === this.camera) this.glide((now - this.lastDraw) / 1000);
+    this.lastDraw = now;
     const preset = PRESETS[this.quality];
     if (scene !== this.lastScene) setShadowSize(scene, preset.shadowMapSize);
     const shadows = this.renderer.shadowMap;
@@ -109,25 +156,74 @@ export class World {
     const w = window.innerWidth;
     const h = window.innerHeight;
     this.renderer.setSize(w, h);
-    this.fit(w, h);
+    this.goal = this.fit(w, h);
+    this.view = { ...this.goal };
+    this.glideT = 1;
+    this.apply();
   }
 
-  /** Frame the plot and the battlefield inside the area left free by the UI. */
-  private fit(w: number, h: number): void {
+  /**
+   * Frames a new area inside the screen area the UI leaves free: glides there, or cuts at once with
+   * `instant`.
+   */
+  setFocus(box: FocusBox, insets: ViewInsets, instant = false): void {
+    const same =
+      (['minX', 'maxX', 'minZ', 'maxZ'] as const).every((k) => Math.abs(box[k] - this.focus[k]) < 1e-3) &&
+      (['left', 'right', 'top', 'bottom'] as const).every((k) => insets[k] === this.insets[k]);
+    this.focus = box;
+    this.insets = insets;
+    if (same && !instant) return;
+    this.goal = this.fit(window.innerWidth, window.innerHeight);
+    if (instant) {
+      this.view = { ...this.goal };
+      this.glideT = 1;
+      this.apply();
+      return;
+    }
+    this.from = { ...this.view };
+    this.glideT = 0;
+  }
+
+  private glide(dt: number): void {
+    if (this.glideT >= 1) return;
+    this.glideT = Math.min(1, this.glideT + Math.min(0.1, dt) / GLIDE);
+    const k = this.glideT < 0.5 ? 4 * this.glideT ** 3 : 1 - (-2 * this.glideT + 2) ** 3 / 2;
+    const lerp = (a: number, b: number) => a + (b - a) * k;
+    this.view = { cx: lerp(this.from.cx, this.goal.cx), cy: lerp(this.from.cy, this.goal.cy), upp: lerp(this.from.upp, this.goal.upp) };
+    this.apply();
+  }
+
+  /** Sets the orthographic frustum from the current view. */
+  private apply(): void {
+    const cam = this.camera;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const { cx, cy, upp } = this.view;
+    this.unitsPerPixel = upp;
+    cam.left = cx - (w / 2) * upp;
+    cam.right = cam.left + w * upp;
+    cam.top = cy + (h / 2) * upp;
+    cam.bottom = cam.top - h * upp;
+    cam.updateProjectionMatrix();
+  }
+
+  /**
+   * The view that fits the focus box inside the area left free by the UI: the view-space point to
+   * put at the screen centre and the world units per CSS pixel.
+   */
+  private fit(w: number, h: number): { cx: number; cy: number; upp: number } {
     const cam = this.camera;
     cam.position.copy(this.target).addScaledVector(VIEW_DIR, 120);
     cam.lookAt(this.target);
     cam.updateMatrixWorld(true);
-    const r = GRID_RADIUS * TILE + TILE / 2;
+    const f = this.focus;
     const pts = [
-      new THREE.Vector3(-r, 0, -r),
-      new THREE.Vector3(-r, 5, -r),
-      new THREE.Vector3(r, 0, -r),
-      new THREE.Vector3(-r, 0, r),
-      new THREE.Vector3(r, 0, r),
-      new THREE.Vector3(SPAWN_X - 3, 0, -7),
-      new THREE.Vector3(SPAWN_X - 8, 0, 8),
-      new THREE.Vector3(SPAWN_X + 5, 0, 0),
+      new THREE.Vector3(f.minX, 0, f.minZ),
+      new THREE.Vector3(f.minX, ROOF, f.minZ),
+      new THREE.Vector3(f.maxX, 0, f.minZ),
+      new THREE.Vector3(f.maxX, ROOF, f.minZ),
+      new THREE.Vector3(f.minX, 0, f.maxZ),
+      new THREE.Vector3(f.maxX, 0, f.maxZ),
     ];
     const inv = cam.matrixWorldInverse;
     let minX = Infinity;
@@ -145,17 +241,10 @@ export class World {
     const availW = Math.max(200, w - ins.left - ins.right);
     const availH = Math.max(200, h - ins.top - ins.bottom);
     const upp = Math.max((maxX - minX) / availW, (maxY - minY) / availH);
-    this.unitsPerPixel = upp;
     // Place the content centre at the centre of the free area.
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
     const freeCx = ins.left + availW / 2 - w / 2;
     const freeCy = -(ins.top + availH / 2 - h / 2);
-    cam.left = cx - freeCx * upp - (w / 2) * upp;
-    cam.right = cam.left + w * upp;
-    cam.top = cy - freeCy * upp + (h / 2) * upp;
-    cam.bottom = cam.top - h * upp;
-    cam.updateProjectionMatrix();
+    return { cx: (minX + maxX) / 2 - freeCx * upp, cy: (minY + maxY) / 2 - freeCy * upp, upp };
   }
 
   setInsets(insets: ViewInsets): void {

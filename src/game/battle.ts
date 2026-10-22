@@ -20,6 +20,8 @@ export interface StatusState {
   t: number;
   v: number;
   src?: number;
+  /** Who gets credit for damage over time (see `Battle.bySource`). */
+  key?: string;
 }
 
 export interface Entity {
@@ -61,6 +63,8 @@ export interface Entity {
   resurrected: boolean;
   /** Set once an `enrage` trait has fired. */
   enraged: boolean;
+  /** Enemies this soldier finished off. */
+  kills: number;
   // Per-tick derived multipliers.
   dmgMult: number;
   atkSpeedMult: number;
@@ -131,6 +135,32 @@ export type BattleEvent =
   | { type: 'steal'; x: number; z: number; amount: number }
   | { type: 'enrage'; id: number };
 
+/** Damage dealt to enemies and enemies finished off by one kind of source. */
+export interface SourceStats {
+  damage: number;
+  kills: number;
+}
+
+/** One sample of the field: army strength of each side and the castle's health share. */
+export interface StrengthSample {
+  t: number;
+  ours: number;
+  theirs: number;
+  castle: number;
+}
+
+/** The soldier with the most kills this wave. */
+export interface MvpRecord {
+  id: number;
+  unitId: string;
+  kills: number;
+}
+
+/** Fighting value of a unit: √(effective HP × damage per second), scaled by the HP it has left. */
+export function unitPower(e: Entity): number {
+  return Math.sqrt(e.maxHp * ((e.def.damage * e.dmgScale) / e.def.attackInterval + 1)) * (e.hp / e.maxHp);
+}
+
 interface SpawnOpts {
   homeUid?: number | null;
   levelMult?: number;
@@ -194,6 +224,15 @@ export class Battle {
   bounty = 0;
   playerDeaths = 0;
   goldStolen = 0;
+  /**
+   * Damage dealt to enemies and kills, by source: a soldier's unit id, a tower's building id or
+   * `castle`. Bookkeeping only: nothing here feeds back into the fight.
+   */
+  readonly bySource = new Map<string, SourceStats>();
+  /** Strength of both sides once per second, for the battle meter's history and the wave report. */
+  readonly timeline: StrengthSample[] = [];
+  mvp: MvpRecord | null = null;
+  private nextSample = 0;
   /** Damage / speed bonus from a standing war monument this tick. */
   bannerDmg = 0;
   bannerSpeed = 0;
@@ -370,6 +409,7 @@ export class Battle {
       summoned: opts.summoned ?? false,
       resurrected: false,
       enraged: false,
+      kills: 0,
       dmgMult: 1,
       atkSpeedMult: 1,
       armorAdd: 0,
@@ -485,7 +525,7 @@ export class Battle {
 
   // ---------------------------------------------------------------- statuses
 
-  applyStatus(target: Entity, status: StatusId, duration: number, value = 1, src?: number): void {
+  applyStatus(target: Entity, status: StatusId, duration: number, value = 1, src?: number, key?: string): void {
     if (!target.alive) return;
     let d = duration;
     if (status === 'root' && target.baseTeam === 'enemy') d += this.mods.rootDurationAdd;
@@ -500,6 +540,7 @@ export class Battle {
       t: Math.max(d, cur?.t ?? 0),
       v: cur ? (status === 'slow' ? Math.min(cur.v, value) : Math.max(cur.v, value)) : value,
       src: src ?? cur?.src,
+      key: key ?? cur?.key,
     };
     if (!cur) this.events.push({ type: 'status', id: target.id, status });
   }
@@ -555,12 +596,29 @@ export class Battle {
     return { mult, crit };
   }
 
+  /** The `bySource` key for damage from `src`; undefined for enemies and unattributed damage. */
+  private sourceKey(src: { entity?: Entity; building?: BBuilding; key?: string }): string | undefined {
+    if (src.key) return src.key;
+    if (src.entity) return src.entity.baseTeam === 'player' ? src.entity.def.id : undefined;
+    if (src.building) return src.building.isCastle ? 'castle' : src.building.def?.id;
+    return undefined;
+  }
+
+  private credit(key: string | undefined, damage: number, kills: number): void {
+    if (!key) return;
+    const s = this.bySource.get(key);
+    if (s) {
+      s.damage += damage;
+      s.kills += kills;
+    } else this.bySource.set(key, { damage, kills });
+  }
+
   /** Deal damage to an entity. Returns damage actually dealt to HP+shield. */
   damageEntity(
     target: Entity,
     amount: number,
     type: DamageType,
-    src: { entity?: Entity; building?: BBuilding },
+    src: { entity?: Entity; building?: BBuilding; key?: string },
     opts: DamageOpts = {},
   ): number {
     if (!target.alive || amount <= 0) return 0;
@@ -584,6 +642,7 @@ export class Battle {
       const armor = Math.min(0.85, Math.max(0, (target.def.armor ?? 0) + target.armorAdd));
       dmg *= 1 - armor;
     }
+    const before = target.hp + target.shield;
     let absorbed = 0;
     if (target.shield > 0) {
       absorbed = Math.min(target.shield, dmg);
@@ -600,7 +659,9 @@ export class Battle {
       const ls = src.entity.def.traits?.find((t) => t.type === 'lifesteal') as { ratio: number } | undefined;
       if (ls && src.entity.alive) this.heal(src.entity, dmg * ls.ratio, false);
     }
-    if (target.hp <= 0) this.kill(target, src.entity);
+    const key = target.baseTeam === 'enemy' ? this.sourceKey(src) : undefined;
+    this.credit(key, Math.min(dmg, Math.max(0, before)), 0);
+    if (target.hp <= 0) this.kill(target, src.entity, key);
     return dmg;
   }
 
@@ -648,7 +709,7 @@ export class Battle {
     e.shield = Math.min(cap, e.shield + amount);
   }
 
-  private kill(e: Entity, killer?: Entity): void {
+  private kill(e: Entity, killer?: Entity, key?: string): void {
     if (!e.alive) return;
     e.alive = false;
     e.hp = 0;
@@ -657,6 +718,11 @@ export class Battle {
     const wasPlayer = e.baseTeam === 'player';
     if (!wasPlayer) {
       this.kills += 1;
+      this.credit(key, 0, 1);
+      if (killer && killer.baseTeam === 'player') {
+        killer.kills += 1;
+        if (!this.mvp || killer.kills > this.mvp.kills) this.mvp = { id: killer.id, unitId: killer.def.id, kills: killer.kills };
+      }
       const g = e.summoned ? 0 : Math.round((e.def.bounty ?? 0) * this.mods.bountyMult);
       if (g > 0) {
         this.bounty += g;
@@ -724,6 +790,12 @@ export class Battle {
     }
     if (this.entities.length > 400) this.entities = this.entities.filter((e) => !e.removed);
 
+    if (this.time >= this.nextSample) {
+      this.nextSample += 1;
+      const s = this.strength();
+      this.timeline.push({ t: Math.round(this.time), ours: s.ours, theirs: s.theirs, castle: Math.max(0, this.castle.hp) / this.castle.maxHp });
+    }
+
     if (!this.result) {
       if (this.castle.destroyed) this.result = 'lose';
       else if (!this.schedule.length && !this.entities.some((e) => e.alive && e.baseTeam === 'enemy')) this.result = 'win';
@@ -739,6 +811,32 @@ export class Battle {
     return this.result !== null && this.endTimer > 1.5;
   }
 
+  /**
+   * Fighting strength on the field: our soldiers and standing towers against the enemies that have
+   * arrived. Both use `unitPower`; a tower counts as √(max HP × damage per second) times its HP share.
+   */
+  strength(): { ours: number; theirs: number } {
+    let ours = 0;
+    let theirs = 0;
+    for (const e of this.entities) {
+      if (!e.alive) continue;
+      if (e.team === 'player') ours += unitPower(e);
+      else theirs += unitPower(e);
+    }
+    for (const b of this.buildings) {
+      const spec = b.def?.tower;
+      if (b.destroyed || !spec) continue;
+      const dps = (spec.damage[b.level - 1] * b.dmgMult) / spec.attackInterval;
+      ours += Math.sqrt(b.maxHp * dps) * (b.hp / b.maxHp);
+    }
+    return { ours, theirs };
+  }
+
+  /** Sources sorted by damage dealt, most first. */
+  topSources(): ({ key: string } & SourceStats)[] {
+    return [...this.bySource.entries()].map(([key, s]) => ({ key, damage: Math.round(s.damage), kills: s.kills })).sort((a, b) => b.damage - a.damage);
+  }
+
   outcome(): BattleOutcome {
     return {
       won: this.result === 'win',
@@ -747,6 +845,10 @@ export class Battle {
       bounty: this.bounty,
       playerDeaths: this.playerDeaths,
       goldStolen: this.goldStolen,
+      sources: this.topSources(),
+      mvp: this.mvp,
+      timeline: this.timeline.map((p) => ({ ...p })),
+      duration: Math.round(this.time),
     };
   }
 
@@ -775,7 +877,7 @@ export class Battle {
         if (s.t <= 0) continue;
         s.t -= dt;
         if (key === 'burn') {
-          this.damageEntity(e, s.v * dt, 'magic', {}, { silent: true });
+          this.damageEntity(e, s.v * dt, 'magic', { key: s.key }, { silent: true });
           if (!e.alive) break;
         }
         if (s.t <= 0) delete e.statuses[key];
@@ -1163,7 +1265,7 @@ export class Battle {
     let theirs = 0;
     for (const e of this.entities) {
       if (!e.alive || e.def.ai === 'engineer') continue;
-      const power = Math.sqrt(e.maxHp * ((e.def.damage * e.dmgScale) / e.def.attackInterval + 1)) * (e.hp / e.maxHp);
+      const power = unitPower(e);
       if (e.team === 'player') {
         if (e.def.ai === 'support') continue;
         ours += power;
@@ -1319,7 +1421,7 @@ export class Battle {
       for (const tr of e.def.traits ?? []) {
         if (tr.type === 'onHit') {
           if (tr.everyN && e.attackCount % tr.everyN !== 0) continue;
-          this.applyStatus(t, tr.status, tr.duration, tr.value ?? 1, e.id);
+          this.applyStatus(t, tr.status, tr.duration, tr.value ?? 1, e.id, e.baseTeam === 'player' ? e.def.id : undefined);
         }
       }
     }
@@ -1487,7 +1589,7 @@ export class Battle {
         if (tr.type !== 'onHit') continue;
         // Damage-over-time scales with the tower's level and bonuses.
         const value = tr.status === 'burn' ? (tr.value ?? 1) * (amount / baseDamage) : tr.value ?? 1;
-        this.applyStatus(o, tr.status, tr.duration, value);
+        this.applyStatus(o, tr.status, tr.duration, value, undefined, b.isCastle ? 'castle' : b.def?.id);
       }
     };
     if (t.alive) hitOne(t, dmg);
