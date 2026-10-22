@@ -1,3 +1,4 @@
+import { doctrineMult } from './campaign/doctrines';
 import { CASTLE, DT, SPAWN_X, SPAWN_Z_SPREAD, TILE, UNIT_LEVEL_MULT, BUILDING_LEVEL_HP_MULT } from './constants';
 import { getBuilding, getUnit, RACE_MAP } from './data/index';
 import { getCampaignWave } from './campaign/campaignWaves';
@@ -316,7 +317,7 @@ export class Battle {
         unitHpMult: bonus.unitHpMult,
         cooldown: 0.5 + this.rng.next() * 0.5,
         healTimer: 1,
-        baseDmgMult: bonus.towerDmgMult * m.towerDmgMult,
+        baseDmgMult: bonus.towerDmgMult * m.towerDmgMult * doctrineMult(def, this.state.level?.doctrine),
         dmgMult: 1,
         atkSpeedMult: 1,
         radius: BUILDING_RADIUS,
@@ -426,7 +427,7 @@ export class Battle {
     const z = b.z + (this.rng.next() - 0.5) * TILE * 0.6;
     return this.createEntity(def, 'player', x, z, {
       homeUid: b.uid,
-      levelMult: UNIT_LEVEL_MULT[b.level - 1],
+      levelMult: UNIT_LEVEL_MULT[b.level - 1] * doctrineMult(b.def, this.state.level?.doctrine),
       hpMult: b.unitHpMult,
       rallyZ: Math.max(-9, Math.min(9, b.z + (this.rng.next() * 2 - 1) * 5)),
     });
@@ -632,6 +633,10 @@ export class Battle {
       }
     }
     let dmg = amount;
+    // Shield wall: enemies shrug off part of what towers, the castle and ranged soldiers throw at them.
+    if (this.mods.enemyRangedResist > 0 && target.baseTeam === 'enemy' && (src.building || (src.entity?.baseTeam === 'player' && src.entity.def.range > 2.5))) {
+      dmg *= 1 - this.mods.enemyRangedResist;
+    }
     const ex = target.statuses.exposed;
     if (ex && ex.t > 0) dmg *= ex.v;
     const mk = target.statuses.mark;
@@ -641,6 +646,11 @@ export class Battle {
     if (type === 'physical') {
       const armor = Math.min(0.85, Math.max(0, (target.def.armor ?? 0) + target.armorAdd));
       dmg *= 1 - armor;
+      // Thorns: soldiers who hit an enemy in melee take part of the blow back.
+      const attacker = src.entity;
+      if (this.mods.enemyThorns > 0 && target.baseTeam === 'enemy' && attacker?.baseTeam === 'player' && attacker.def.range <= 2.5) {
+        this.damageEntity(attacker, dmg * this.mods.enemyThorns, 'magic', { entity: target }, { canDodge: false, silent: true });
+      }
     }
     const before = target.hp + target.shield;
     let absorbed = 0;
@@ -956,6 +966,7 @@ export class Battle {
         eva += m.unitEvasionAdd;
       } else {
         eva += m.enemyEvasionAdd;
+        armor += m.enemyArmorAdd;
       }
       if (e.enraged) {
         const en = e.def.traits?.find((t) => t.type === 'enrage') as { dmgMult: number; atkSpeedMult: number } | undefined;

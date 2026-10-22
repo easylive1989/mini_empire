@@ -1,3 +1,7 @@
+import { countersOf, analyzeWave } from './advisor';
+import { waveForState } from './battle';
+import { doctrineOf, type DoctrineId } from './campaign/doctrines';
+import { getTerritory } from './campaign/territories';
 import { getBuilding, raceBuildings } from './data/index';
 import {
   build,
@@ -14,6 +18,8 @@ import {
   tileAt,
   upgrade,
   upgradeCastle,
+  availableBuildings,
+  buildCost,
   type GameState,
 } from './state';
 import type { RaceId } from './types';
@@ -83,8 +89,7 @@ function tryExpand(state: GameState): boolean {
 }
 
 /** Spend the treasury for one prep phase. */
-export function botPrepare(state: GameState, planIndex: { n: number }): void {
-  const plan = BOT_PLANS[state.race];
+export function botPrepare(state: GameState, planIndex: { n: number }, plan = BOT_PLANS[state.race]): void {
   // Keep the castle alive.
   if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
 
@@ -179,4 +184,57 @@ export function lazyPrepare(state: GameState, planIndex: { n: number }): void {
     build(state, spot.i, spot.j, id);
     planIndex.n++;
   }
+}
+
+/**
+ * A player who reads the wave preview: before following the usual plan, answers every threat of
+ * the next wave that the town has no counter for with the cheapest building that counters it.
+ * Comparing it with `botPrepare` shows how much reading the enemy is worth.
+ */
+export function adaptivePrepare(state: GameState, planIndex: { n: number }): void {
+  if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
+  const wave = waveForState(state);
+  // Enemies the army cannot touch (flyers) or barely scratch (heavy armor) get an answer first,
+  // upgrading the castle when the answer needs it.
+  for (const threat of analyzeWave(state, wave)) {
+    if (threat.severity !== 'warn' || (threat.id !== 'air' && threat.id !== 'armor')) continue;
+    const answerAt = (level: number) =>
+      availableBuildings(state)
+        .filter((b) => b.kind !== 'resource' && b.castleLevel <= level && countersOf(b).includes(threat.id))
+        .sort((a, b) => buildCost(state, a) - buildCost(state, b))[0];
+    if (!answerAt(state.castleLevel) && answerAt(state.castleLevel + 1) && canUpgradeCastle(state).ok) upgradeCastle(state);
+    const answer = answerAt(state.castleLevel);
+    if (!answer) continue;
+    const spot = bestTile(state, answer.id);
+    if (spot && canBuild(state, spot.i, spot.j, answer.id).ok) build(state, spot.i, spot.j, answer.id);
+  }
+  // Armor and shield walls cover the whole army: every other building of the plan answers them.
+  const plan = BOT_PLANS[state.race];
+  const need = wave.trait === 'armored' ? 'armor' : wave.trait === 'shieldwall' ? 'shield' : null;
+  const counters = need ? plan.filter((id) => countersOf(getBuilding(id)).includes(need)) : [];
+  botPrepare(state, planIndex, counters.length ? plan.flatMap((id, k) => [counters[k % counters.length], id]) : plan);
+}
+
+/** A one-trick player: the race's first combat building over and over, upgraded like the normal bot. */
+export function monoPrepare(state: GameState, planIndex: { n: number }): void {
+  const core = BOT_PLANS[state.race].find((id) => getBuilding(id).kind !== 'resource')!;
+  // A long plan keeps the bot from ever reaching the campaign specials.
+  botPrepare(state, planIndex, [core, 'gold_mine', core, 'gold_mine', ...Array<string>(30).fill(core)]);
+}
+
+/** The doctrine most of a build order belongs to (what a player sticking to one army would pick). */
+export function planDoctrine(plan: string[]): DoctrineId {
+  const ranged = plan.filter((id) => doctrineOf(getBuilding(id)) === 'ranged').length;
+  const front = plan.filter((id) => doctrineOf(getBuilding(id)) === 'front').length;
+  return ranged > front ? 'ranged' : 'front';
+}
+
+/** Doctrine for each strategy: the one-trick and fixed bots keep theirs, the wave reader adapts. */
+export function botDoctrine(race: RaceId, territoryId: string, strategy: 'fixed' | 'adaptive' | 'mono'): DoctrineId {
+  const plan = BOT_PLANS[race];
+  if (strategy === 'mono') return doctrineOf(getBuilding(plan.find((id) => getBuilding(id).kind !== 'resource')!)) ?? 'front';
+  // A shield wall is broken in melee; thorns, flyers, raiders and armor are answered from range.
+  const trait = getTerritory(territoryId).trait;
+  if (strategy === 'adaptive' && trait) return trait === 'shieldwall' ? 'front' : 'ranged';
+  return planDoctrine(plan);
 }

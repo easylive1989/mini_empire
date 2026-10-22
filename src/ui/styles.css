@@ -3794,3 +3794,47 @@ hr {
 .map-legend .lg-hint {
   color: var(--text-4);
 }
+
+/* War doctrine picker on the territory panel. */
+.doctrine-opts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.doctrine-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(201, 163, 92, 0.3);
+  background: rgba(23, 27, 38, 0.9);
+  color: var(--text-2);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doctrine-opt b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.doctrine-opt em {
+  font-style: normal;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(95, 174, 107, 0.2);
+  color: #5fae6b;
+}
+
+.doctrine-opt.active {
+  border-color: #e2b34a;
+  background: rgba(226, 179, 74, 0.12);
+}

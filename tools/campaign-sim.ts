@@ -1,9 +1,10 @@
 // Campaign balance check: the bot liberates the map with two strategies and
 // reports how close each territory battle was.
-// Usage: npm run campaign-sim   (env RACE=elf to filter, STRAT=straight|full|lazy)
+// Usage: npm run campaign-sim   (env RACE=elf to filter, STRAT=straight|full|lazy|adaptive|mono)
+// `adaptive` reads each wave preview and builds counters; `mono` spams one combat building. Both take the full route.
 // `lazy` takes the straight road with level-1 starter barracks only and should fail by tier 2-3.
 import { simulateBattle } from '../src/game/battle';
-import { botPrepare, lazyPrepare } from '../src/game/bot';
+import { adaptivePrepare, botDoctrine, botPrepare, lazyPrepare, monoPrepare } from '../src/game/bot';
 import { createLevelState, isAttackable, newCampaign, recordBattle, type CampaignState } from '../src/game/campaign/campaign';
 import { CAPITAL_TERRITORY, TERRITORIES, territoryTier } from '../src/game/campaign/territories';
 import { RACES } from '../src/game/data/index';
@@ -13,7 +14,7 @@ import { applyBattleOutcome } from '../src/game/state';
 const base = DIFFICULTY.base;
 
 /** Plays a whole territory battle with the bot; returns whether it was won. */
-type Strategy = 'straight' | 'full' | 'lazy';
+type Strategy = 'straight' | 'full' | 'lazy' | 'adaptive' | 'mono';
 
 function playLevel(c: CampaignState, id: string, seed: number, mult = 1, prepare = botPrepare): { won: boolean; kills: number } {
   DIFFICULTY.base = base * mult;
@@ -48,15 +49,16 @@ function margin(c: CampaignState, id: string, prepare = botPrepare): number {
 const STRAIGHT = ['t_wheat', 't_ravenhold', 't_royalcamp', CAPITAL_TERRITORY.id];
 
 function run(race: (typeof RACES)[number]['id'], strategy: Strategy): string {
-  const prepare = strategy === 'lazy' ? lazyPrepare : botPrepare;
+  const prepare = ({ lazy: lazyPrepare, adaptive: adaptivePrepare, mono: monoPrepare } as Partial<Record<Strategy, typeof botPrepare>>)[strategy] ?? botPrepare;
   const c = newCampaign(race);
   const out: string[] = [];
   const order =
-    strategy !== 'full'
+    strategy === 'straight' || strategy === 'lazy'
       ? STRAIGHT
       : [...TERRITORIES.filter((t) => !t.start && !t.capital).sort((a, b) => territoryTier(a) - territoryTier(b)).map((t) => t.id), CAPITAL_TERRITORY.id];
   for (const id of order) {
     if (!isAttackable(c, id)) continue;
+    c.doctrine = botDoctrine(race, id, strategy === 'adaptive' ? 'adaptive' : strategy === 'mono' ? 'mono' : 'fixed');
     const m = margin(c, id, prepare);
     let tries = 0;
     let res = playLevel(c, id, 1, 1, prepare);
