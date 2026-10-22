@@ -1,3 +1,5 @@
+import { countersOf, analyzeWave } from './advisor';
+import { waveForState } from './battle';
 import { getBuilding, raceBuildings } from './data/index';
 import {
   build,
@@ -14,6 +16,8 @@ import {
   tileAt,
   upgrade,
   upgradeCastle,
+  availableBuildings,
+  buildCost,
   type GameState,
 } from './state';
 import type { RaceId } from './types';
@@ -83,8 +87,7 @@ function tryExpand(state: GameState): boolean {
 }
 
 /** Spend the treasury for one prep phase. */
-export function botPrepare(state: GameState, planIndex: { n: number }): void {
-  const plan = BOT_PLANS[state.race];
+export function botPrepare(state: GameState, planIndex: { n: number }, plan = BOT_PLANS[state.race]): void {
   // Keep the castle alive.
   if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
 
@@ -179,4 +182,29 @@ export function lazyPrepare(state: GameState, planIndex: { n: number }): void {
     build(state, spot.i, spot.j, id);
     planIndex.n++;
   }
+}
+
+/**
+ * A player who reads the wave preview: before following the usual plan, answers every threat of
+ * the next wave that the town has no counter for with the cheapest building that counters it.
+ * Comparing it with `botPrepare` shows how much reading the enemy is worth.
+ */
+export function adaptivePrepare(state: GameState, planIndex: { n: number }): void {
+  if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
+  for (const threat of analyzeWave(state, waveForState(state))) {
+    if (threat.severity === 'ok') continue;
+    const answer = availableBuildings(state)
+      .filter((b) => b.kind !== 'resource' && b.castleLevel <= state.castleLevel && countersOf(b).includes(threat.id))
+      .sort((a, b) => buildCost(state, a) - buildCost(state, b))[0];
+    if (!answer) continue;
+    const spot = bestTile(state, answer.id);
+    if (spot && canBuild(state, spot.i, spot.j, answer.id).ok) build(state, spot.i, spot.j, answer.id);
+  }
+  botPrepare(state, planIndex);
+}
+
+/** A one-trick player: the race's first combat building over and over, upgraded like the normal bot. */
+export function monoPrepare(state: GameState, planIndex: { n: number }): void {
+  const core = BOT_PLANS[state.race].find((id) => getBuilding(id).kind !== 'resource')!;
+  botPrepare(state, planIndex, [core, 'gold_mine', core, 'gold_mine', core, core, core]);
 }
