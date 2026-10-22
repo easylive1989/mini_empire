@@ -641,6 +641,11 @@ export class Battle {
     if (type === 'physical') {
       const armor = Math.min(0.85, Math.max(0, (target.def.armor ?? 0) + target.armorAdd));
       dmg *= 1 - armor;
+      // Thorns: soldiers who hit an enemy in melee take part of the blow back.
+      const attacker = src.entity;
+      if (this.mods.enemyThorns > 0 && target.baseTeam === 'enemy' && attacker?.baseTeam === 'player' && attacker.def.range <= 2.5) {
+        this.damageEntity(attacker, dmg * this.mods.enemyThorns, 'magic', { entity: target }, { canDodge: false, silent: true });
+      }
     }
     const before = target.hp + target.shield;
     let absorbed = 0;
@@ -956,6 +961,7 @@ export class Battle {
         eva += m.unitEvasionAdd;
       } else {
         eva += m.enemyEvasionAdd;
+        armor += m.enemyArmorAdd;
       }
       if (e.enraged) {
         const en = e.def.traits?.find((t) => t.type === 'enrage') as { dmgMult: number; atkSpeedMult: number } | undefined;

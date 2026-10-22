@@ -17,6 +17,7 @@ import {
 } from './constants';
 import { PERK_MAP } from './campaign/perks';
 import { TERRAINS, type TerrainId } from './campaign/terrain';
+import { TRAITS, type TraitId } from './campaign/traits';
 import { BOONS, BOON_MAP } from './data/boons';
 import { BUILDINGS, getBuilding, RACE_MAP, raceBuildings, sortBuildings } from './data/index';
 import { Rng } from './rng';
@@ -82,6 +83,7 @@ export interface LevelInfo {
   name: string;
   terrain: TerrainId;
   totalWaves: number;
+  trait?: TraitId;
 }
 
 /**
@@ -197,6 +199,8 @@ export function baseModifiers(): Modifiers {
     enemyDmgMult: 1,
     enemySpeedMult: 1,
     enemyEvasionAdd: 0,
+    enemyArmorAdd: 0,
+    enemyThorns: 0,
   };
 }
 
@@ -223,6 +227,7 @@ export function getModifiers(state: GameState): Modifiers {
     m.castleIncomeMult *= CAMPAIGN_ECONOMY.castleIncome;
     m.incomeMult *= CAMPAIGN_ECONOMY.income;
     TERRAINS[state.level.terrain].apply(m);
+    if (state.level.trait) TRAITS[state.level.trait].apply?.(m);
   }
   return m;
 }

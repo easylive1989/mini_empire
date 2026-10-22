@@ -19,6 +19,7 @@ import {
   type CampaignState,
 } from './game/campaign/campaign';
 import { TERRAINS } from './game/campaign/terrain';
+import { TRAITS } from './game/campaign/traits';
 import { getTerritory } from './game/campaign/territories';
 import { DT, FINAL_WAVE, GRID_RADIUS } from './game/constants';
 import { getBuilding, UNITS } from './game/data/index';
@@ -376,7 +377,7 @@ class App {
     this.world.setFocus(this.focusFor(this.state), this.ui.insets, true);
     this.onResize();
     this.music.play('battle');
-    this.ui.banner(t.name, TERRAINS[t.terrain].effect);
+    this.ui.banner(t.name, t.trait ? `${TRAITS[t.trait].name}：${TRAITS[t.trait].desc}` : TERRAINS[t.terrain].effect);
   }
 
   private exit(): void {

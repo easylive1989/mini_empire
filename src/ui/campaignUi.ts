@@ -16,6 +16,7 @@ import { getCampaignWave, territoryWaveCount } from '../game/campaign/campaignWa
 import { PERK_MAP } from '../game/campaign/perks';
 import { DEMON_LORD, LORE } from '../game/campaign/story';
 import { TERRAINS } from '../game/campaign/terrain';
+import { TRAITS } from '../game/campaign/traits';
 import { getTerritory, REGIONS, TERRITORIES, territoryTier, WILD_KIND_NAME, type Territory } from '../game/campaign/territories';
 import { FACTIONS } from '../game/data/factions';
 import { getBuilding, getUnit, RACE_MAP } from '../game/data/index';
@@ -586,6 +587,10 @@ export class CampaignUi {
       );
     }
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, `地形・${terrain.name}`)), h('p', { class: 'small' }, terrain.effect));
+    if (t.trait && status !== 'liberated') {
+      const trait = TRAITS[t.trait];
+      nodes.push(h('div', { class: 'sec-title' }, h('span', {}, `敵軍特性・${trait.name}`)), h('p', { class: 'small' }, `${trait.desc}對策：${trait.answer}。`));
+    }
     nodes.push(h('div', { class: 'sec-title' }, h('span', {}, '收復獎勵')), this.rewardCard(t));
     if (t.faction) {
       const best = territoryStars(c, t.id);

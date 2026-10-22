@@ -191,20 +191,30 @@ export function lazyPrepare(state: GameState, planIndex: { n: number }): void {
  */
 export function adaptivePrepare(state: GameState, planIndex: { n: number }): void {
   if (state.castleHp < castleMaxHp(state) * 0.55) repairCastle(state);
-  for (const threat of analyzeWave(state, waveForState(state))) {
-    if (threat.severity === 'ok') continue;
-    const answer = availableBuildings(state)
-      .filter((b) => b.kind !== 'resource' && b.castleLevel <= state.castleLevel && countersOf(b).includes(threat.id))
-      .sort((a, b) => buildCost(state, a) - buildCost(state, b))[0];
+  const wave = waveForState(state);
+  // Enemies the army cannot touch (flyers) or barely scratch (heavy armor) get an answer first,
+  // upgrading the castle when the answer needs it.
+  for (const threat of analyzeWave(state, wave)) {
+    if (threat.severity !== 'warn' || (threat.id !== 'air' && threat.id !== 'armor')) continue;
+    const answerAt = (level: number) =>
+      availableBuildings(state)
+        .filter((b) => b.kind !== 'resource' && b.castleLevel <= level && countersOf(b).includes(threat.id))
+        .sort((a, b) => buildCost(state, a) - buildCost(state, b))[0];
+    if (!answerAt(state.castleLevel) && answerAt(state.castleLevel + 1) && canUpgradeCastle(state).ok) upgradeCastle(state);
+    const answer = answerAt(state.castleLevel);
     if (!answer) continue;
     const spot = bestTile(state, answer.id);
     if (spot && canBuild(state, spot.i, spot.j, answer.id).ok) build(state, spot.i, spot.j, answer.id);
   }
-  botPrepare(state, planIndex);
+  // Armor covers the whole army: every other building of the plan deals magic damage.
+  const plan = BOT_PLANS[state.race];
+  const counters = wave.trait === 'armored' ? plan.filter((id) => countersOf(getBuilding(id)).includes('armor')) : [];
+  botPrepare(state, planIndex, counters.length ? plan.flatMap((id, k) => [counters[k % counters.length], id]) : plan);
 }
 
 /** A one-trick player: the race's first combat building over and over, upgraded like the normal bot. */
 export function monoPrepare(state: GameState, planIndex: { n: number }): void {
   const core = BOT_PLANS[state.race].find((id) => getBuilding(id).kind !== 'resource')!;
-  botPrepare(state, planIndex, [core, 'gold_mine', core, 'gold_mine', core, core, core]);
+  // A long plan keeps the bot from ever reaching the campaign specials.
+  botPrepare(state, planIndex, [core, 'gold_mine', core, 'gold_mine', ...Array<string>(30).fill(core)]);
 }

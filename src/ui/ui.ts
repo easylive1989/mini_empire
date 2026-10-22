@@ -4,6 +4,7 @@ import { campaignPerkDefs } from '../game/campaign/campaign';
 import { getCampaignWave } from '../game/campaign/campaignWaves';
 import { LORE } from '../game/campaign/story';
 import { TERRAINS } from '../game/campaign/terrain';
+import { TRAITS } from '../game/campaign/traits';
 import { getTerritory } from '../game/campaign/territories';
 import { BOSS_WAVES, CASTLE, FINAL_WAVE, MAX_BUILDING_LEVEL, UNIT_LEVEL_MULT } from '../game/constants';
 import { BOON_MAP } from '../game/data/boons';
@@ -1086,6 +1087,8 @@ export class Ui {
     if (state.level) {
       const terrain = TERRAINS[state.level.terrain];
       nodes.push(h('div', { class: 'info-card terrain' }, h('b', {}, `地形・${terrain.name}`), '　', terrain.effect));
+      const trait = state.level.trait ? TRAITS[state.level.trait] : null;
+      if (trait) nodes.push(h('div', { class: 'info-card terrain' }, h('b', {}, `敵軍特性・${trait.name}`), '　', `${trait.desc}對策：${trait.answer}。`));
     }
     this.right.replaceChildren(...nodes.filter((n): n is Node => !!n));
   }

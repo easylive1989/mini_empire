@@ -3,6 +3,7 @@ import type { FactionId } from '../data/factions';
 import { baseScaling, DIFFICULTY, unitThreat, waveBudget } from '../data/waves';
 import type { WaveDef, WaveGroup } from '../types';
 import { getTerritory, territoryTier } from './territories';
+import { TRAITS } from './traits';
 
 type Mix = [unit: string, weight: number, minTier?: number];
 
@@ -101,7 +102,16 @@ export function getCampaignWave(territoryId: string, wave: number): WaveDef {
   const total = territoryWaveCount(territoryId);
   const last = wave >= total;
   const mixes = t.capital ? CAPITAL_WAVES : FACTION_WAVES[t.faction as Exclude<FactionId, 'demonlord'>];
-  const mix = mixes[Math.min(wave, mixes.length) - 1].filter(([, , minTier]) => (minTier ?? 0) <= tier);
+  let mix = mixes[Math.min(wave, mixes.length) - 1].filter(([, , minTier]) => (minTier ?? 0) <= tier);
+  const extra = t.trait ? TRAITS[t.trait].extraMix : undefined;
+  if (extra && !last) {
+    // The trait's units take their share of the budget; the wave's own mix fills the rest.
+    const own = mix.reduce((s, [, w]) => s + w, 0);
+    const share = extra.reduce((s, [, w]) => s + w, 0);
+    const merged = new Map(mix.map(([u, w]) => [u, (w / own) * (1 - share)]));
+    for (const [u, w] of extra) merged.set(u, (merged.get(u) ?? 0) + w);
+    mix = [...merged].map(([u, w]): Mix => [u, w]);
+  }
   const boss = last ? (t.capital ? 'b_demonlord' : FACTION_BOSS[t.faction as Exclude<FactionId, 'demonlord'>](tier)) : undefined;
 
   const e = effectiveWave(territoryId, wave);
@@ -120,5 +130,6 @@ export function getCampaignWave(territoryId: string, wave: number): WaveDef {
     hpMult: sc.hp * crowd * crowd,
     dmgMult: sc.dmg,
     bossHpMult: CAMPAIGN.bossHp[tier],
+    trait: t.trait,
   };
 }

@@ -161,7 +161,7 @@ export function startingCastle(c: CampaignState): number {
 export function createLevelState(c: CampaignState, territoryId: string, seed = Date.now()): GameState {
   const t = getTerritory(territoryId);
   const s = newGame(c.race, seed);
-  s.level = { territoryId, name: t.name, terrain: t.terrain, totalWaves: territoryWaveCount(territoryId) };
+  s.level = { territoryId, name: t.name, terrain: t.terrain, totalWaves: territoryWaveCount(territoryId), trait: t.trait };
   s.perks = campaignPerks(c);
   s.unlocks = campaignUnlocks(c);
   s.gold = startingGold(c, territoryId);
